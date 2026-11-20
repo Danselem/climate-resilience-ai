@@ -162,6 +162,61 @@ def test_an_answer_carries_no_citation_field() -> None:
     assert "citations" not in answer.model_dump()
 
 
+def flood_measurement(value: float, mechanism: str = "riverine") -> Measurement:
+    return Measurement(
+        row_key="row-flood",
+        indicator_id="flood_exposed_area_pct",
+        value=value,
+        unit="percent",
+        scope_level="ward",
+        scope_id="ethekwini-075",
+        scope_name="eThekwini 075",
+        period_start="1960-01-01",
+        period_end="1999-12-31",
+        hazard_type="flood",
+        mechanism=mechanism,
+        return_period_years=100,
+        depth_threshold_m=0.0,
+        basis="modelled_estimate",
+        coverage_pct=100.0,
+    )
+
+
+def test_a_no_risk_claim_beside_positive_exposure_is_caught() -> None:
+    from climate_resilience.assistant.agent import _contradicts_evidence
+
+    answer = Answer(text="Ward 75 has no flood risk.")
+
+    found = _contradicts_evidence(answer, [flood_measurement(83.588)])
+
+    assert found is not None
+    assert found.value == 83.588
+
+
+def test_a_no_risk_claim_beside_zero_exposure_is_allowed() -> None:
+    from climate_resilience.assistant.agent import _contradicts_evidence
+
+    answer = Answer(text="The coast has no flood risk in this model.")
+
+    assert _contradicts_evidence(answer, [flood_measurement(0.0, "coastal")]) is None
+
+
+def test_an_abstention_is_never_treated_as_a_contradiction() -> None:
+    from climate_resilience.assistant.agent import _contradicts_evidence
+
+    answer = Answer(text="I cannot say it is safe.", abstained=True, missing=["data"])
+
+    assert _contradicts_evidence(answer, [flood_measurement(83.588)]) is None
+
+
+def test_an_ordinary_negative_sentence_is_not_flagged() -> None:
+    from climate_resilience.assistant.agent import _contradicts_evidence
+
+    answer = Answer(text="83.6% of ward 75 is exposed; this is not a small share.")
+
+    assert _contradicts_evidence(answer, [flood_measurement(83.588)]) is None
+
+
 # --- configuration ---------------------------------------------------------
 
 

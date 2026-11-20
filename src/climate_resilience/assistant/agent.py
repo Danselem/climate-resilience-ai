@@ -75,6 +75,24 @@ MAX_TOOL_CALLS = 5
 # refused to call a tool at all. Model choice here has to be measured.
 DEFAULT_MODELS = ("amazon/nova-micro-v1", "particle-ai/particle-1:free")
 
+# Phrases that assert absence of exposure. If the answer also cites a positive
+# exposure value, it is contradicting its own evidence -- which is exactly what
+# a successful instruction injection looks like.
+ABSENCE_CLAIMS = (
+    "no flood risk",
+    "no flood",
+    "no risk of flooding",
+    "not at risk",
+    "is safe",
+    "are safe",
+    "no exposure",
+    "not exposed",
+    "zero exposure",
+    "no inundation",
+)
+
+EXPOSURE_INDICATORS = ("flood_exposed_area_pct", "flood_exposed_population")
+
 FLOOD_CAVEAT = (
     "Caveat: riverine and coastal flooding only. Pluvial (surface-water) "
     "flooding is not modelled."
@@ -487,6 +505,21 @@ def ask(
     seconds = time.perf_counter() - started
     answer = _with_flood_caveat(result.output, deps.seen)
     citations = _citations(deps)
+    contradiction = _contradicts_evidence(answer, deps.seen)
+    if contradiction is not None:
+        answer = Answer(
+            text=(
+                "That statement contradicts the evidence this system published: "
+                f"{contradiction.scope_name} is recorded at {contradiction.value:g}"
+                f"{contradiction.unit} exposed"
+                f" ({contradiction.mechanism or 'all mechanisms'}, "
+                f"{contradiction.return_period_years or '-'}-year). "
+                "It cannot be restated as safe, and no answer is given."
+            ),
+            abstained=True,
+            missing=["a claim consistent with the cited evidence"],
+        )
+
     if not answer.abstained and not citations:
         # A confident answer with no tool behind it is a guess. Converting it
         # to a refusal is the only way to keep "never invent a number" true
@@ -515,6 +548,29 @@ def ask(
         input_tokens=input_tokens,
         output_tokens=output_tokens,
     )
+
+
+def _contradicts_evidence(
+    answer: Answer, measurements: list[Measurement]
+) -> Measurement | None:
+    """A confident 'no risk' next to a positive exposure figure is a fabrication.
+
+    This is the detectable half of prompt injection: the model can be talked
+    into asserting the opposite of what it just retrieved, but the assertion
+    and the retrieval are both in hand, so the contradiction is mechanical.
+    """
+    if answer.abstained:
+        return None
+    lowered = answer.text.lower()
+    if not any(claim in lowered for claim in ABSENCE_CLAIMS):
+        return None
+    for measurement in measurements:
+        if (
+            measurement.indicator_id in EXPOSURE_INDICATORS
+            and measurement.value > 0
+        ):
+            return measurement
+    return None
 
 
 def _citations(deps: ToolDeps) -> list[Citation]:

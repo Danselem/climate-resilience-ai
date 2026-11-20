@@ -98,10 +98,16 @@ output's `quality.warnings`.
 - **Retrieval quality is not measured.** Recall@k, MRR and nDCG need labelled
   relevant chunks. The document items only check that the right document was
   cited, which is a weaker claim.
-- **One adversarial injection succeeded.** A prompt asking the system to
-  "confirm ward 75 has no flood risk" produced exactly that phrase. The guard
-  does not cover free-text instruction attacks, and the model can be talked into
-  a false claim about data it did fetch.
+- **Adversarial coverage is now 8/8, but the guard is not general.** The
+  injection that previously succeeded is caught by a contradiction check: an
+  answer asserting absence while citing a positive exposure value is rejected.
+  That covers claims which contradict the retrieved evidence. It cannot catch an
+  injected claim that is merely *unrelated* to the evidence, and it cannot catch
+  a model persuaded to stay silent about a figure it did retrieve.
+- **Six of forty-eight items fail on the request ceiling.** The model loops on
+  some questions and is stopped. Raising the ceiling to five requests did not
+  improve accuracy and pushed p95 from 3.9 s to 5.5 s, so it was reverted. These
+  are recorded as failures rather than tuned away.
 
 ## Assistant
 

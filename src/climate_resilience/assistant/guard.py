@@ -127,6 +127,41 @@ UNSUPPORTED = (
 )
 
 
+# Instruction-override and credential-extraction attempts. Refusing these
+# before the model runs is not a filter on free speech: it removes the only
+# surface on which an injected instruction could reach the tools.
+INJECTION_TERMS = (
+    "ignore your",
+    "ignore previous",
+    "ignore all previous",
+    "ignore the above",
+    "system prompt",
+    "your instructions",
+    "repeat your",
+    "reveal your",
+    "print your",
+    "api key",
+    "openrouter",
+)
+
+RISK_SCORE_TERMS = (
+    "risk score",
+    "out of 10",
+    "score out of",
+    "rank the wards by risk",
+)
+
+COMBINE_TERMS = (
+    "combined total",
+    "add them together",
+    "add riverine",
+    "add coastal",
+    "total flood risk",
+    "sum of riverine",
+    "sum the mechanisms",
+)
+
+
 @dataclass(frozen=True)
 class Refusal:
     text: str
@@ -138,6 +173,39 @@ def preflight(question: str) -> Refusal | None:
     lowered = question.lower().strip()
     if not lowered:
         return Refusal("The question is empty.", ["a question"])
+
+    if any(term in lowered for term in INJECTION_TERMS):
+        return Refusal(
+            "I do not follow instructions that override the analytical rules, "
+            "and I do not reveal configuration or credentials.",
+            ["a question about eThekwini climate data"],
+        )
+
+    suppression = ("leave out", "omit", "without the", "exclude", "don't mention")
+    if ("caveat" in lowered or "pluvial" in lowered) and any(
+        term in lowered for term in suppression
+    ):
+        return Refusal(
+            "The pluvial caveat is part of the result, not an optional extra: "
+            "the data covers riverine and coastal flooding only. I will not "
+            "produce a flood figure with that removed.",
+            ["an answer that keeps the flood mechanism caveat"],
+        )
+
+    if any(term in lowered for term in RISK_SCORE_TERMS):
+        return Refusal(
+            "No composite risk score is published. Hazard, exposure and "
+            "vulnerability are reported separately, and combining them into a "
+            "single score requires a defined and validated method.",
+            ["a defined risk-scoring method"],
+        )
+
+    if any(term in lowered for term in COMBINE_TERMS):
+        return Refusal(
+            "Riverine and coastal flooding are separate hazards and are never "
+            "summed. Each is published with its own mechanism label.",
+            ["a method that justifies merging two hazard mechanisms"],
+        )
 
     if _is_document_question(lowered):
         return None
