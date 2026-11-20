@@ -14,6 +14,7 @@ import typer
 
 from . import acquire
 from . import catalogue as catalogue_module
+from .assistant.agent import ask as assistant_ask
 from .config import get_settings
 from .exposure import build_exposure
 from .flood import build_flood
@@ -121,6 +122,33 @@ def exposure() -> None:
     typer.echo(f"rows          : {summary.rows}")
     typer.echo(f"content_hash  : {summary.content_hash}")
     typer.echo(f"snapshot      : {summary.snapshot_path}")
+
+
+@app.command()
+def ask(
+    question: str = typer.Argument(..., help="Question in plain language"),
+    model: str | None = typer.Option(None, help="Override the configured model"),
+) -> None:
+    """Ask the assistant, grounded in the mart and the document index."""
+    settings = get_settings()
+    result = assistant_ask(settings, question, model=model)
+
+    typer.echo(result.answer.text)
+    if result.answer.citations:
+        typer.echo("\ncitations:")
+        for citation in result.answer.citations:
+            typer.echo(f"  [{citation.kind}] {citation.reference}")
+    if result.answer.abstained:
+        typer.echo("\nmissing:")
+        for item in result.answer.missing:
+            typer.echo(f"  - {item}")
+    typer.echo(
+        f"\nrequests={result.requests} "
+        f"tokens={result.input_tokens}/{result.output_tokens} "
+        f"guard={result.refused_by_guard}"
+    )
+    if result.error:
+        typer.echo(f"error: {result.error}")
 
 
 @app.command()

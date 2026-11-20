@@ -40,6 +40,9 @@ class Available(BaseModel):
 class ToolOutput(BaseModel):
     status: Literal["ok", "insufficient"] = "ok"
     envelopes: list[EvidenceEnvelope] = Field(default_factory=list)
+    # Parallel to ``envelopes``: the mart's stable identity for each row, which
+    # is what a citation names and what ``explain`` accepts.
+    row_keys: list[str] = Field(default_factory=list)
     scopes: list[ScopeRef] = Field(default_factory=list)
     available: Available | None = None
     message: str | None = None
@@ -66,8 +69,16 @@ class ToolOutput(BaseModel):
 
     @classmethod
     def evidence(
-        cls, envelopes: list[EvidenceEnvelope], *, message: str | None = None
+        cls,
+        pairs: list[tuple[str, EvidenceEnvelope]],
+        *,
+        message: str | None = None,
     ) -> ToolOutput:
-        if not envelopes:
+        if not pairs:
             return cls.insufficient("no published row matches the request")
-        return cls(status="ok", envelopes=envelopes, message=message)
+        return cls(
+            status="ok",
+            envelopes=[envelope for _, envelope in pairs],
+            row_keys=[row_key for row_key, _ in pairs],
+            message=message,
+        )

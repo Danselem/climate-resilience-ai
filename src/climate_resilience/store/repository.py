@@ -7,15 +7,33 @@ from typing import Any
 
 from sqlalchemy import Engine, create_engine, delete, func, inspect, select, text
 from sqlalchemy.engine import make_url
+from sqlalchemy.pool import StaticPool
 
 from .models import boundary, boundary_crosswalk, indicator_value, metadata
 
 
 def make_engine(database_url: str) -> Engine:
+    """Build an engine that is safe to use from worker threads.
+
+    Tool calls run outside the request thread, and SQLite refuses a connection
+    used from a thread other than the one that created it. ``check_same_thread``
+    is therefore disabled deliberately, and an in-memory database uses a single
+    shared connection so every thread sees the same tables.
+    """
     url = make_url(database_url)
-    if url.drivername.startswith("sqlite") and url.database not in (None, "", ":memory:"):
-        Path(url.database).parent.mkdir(parents=True, exist_ok=True)
-    return create_engine(database_url, future=True)
+    if not url.drivername.startswith("sqlite"):
+        return create_engine(database_url, future=True)
+
+    connect_args = {"check_same_thread": False}
+    if url.database in (None, "", ":memory:"):
+        return create_engine(
+            database_url,
+            future=True,
+            connect_args=connect_args,
+            poolclass=StaticPool,
+        )
+    Path(url.database).parent.mkdir(parents=True, exist_ok=True)
+    return create_engine(database_url, future=True, connect_args=connect_args)
 
 
 def ensure_schema(engine: Engine) -> None:

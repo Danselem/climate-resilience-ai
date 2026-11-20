@@ -34,8 +34,11 @@ def _rows(engine: Engine, stmt: Select) -> list[dict[str, object]]:
         return [dict(row._mapping) for row in conn.execute(stmt)]
 
 
-def _envelopes(rows: list[dict[str, object]]) -> list[EvidenceEnvelope]:
-    envelopes: list[EvidenceEnvelope] = []
+def _pairs(
+    rows: list[dict[str, object]],
+) -> list[tuple[str, EvidenceEnvelope]]:
+    """Row key and envelope together: a citation needs the key, a reader the rest."""
+    pairs: list[tuple[str, EvidenceEnvelope]] = []
     for row in rows:
         raw = row.get("envelope_json")
         if not raw:
@@ -43,8 +46,10 @@ def _envelopes(rows: list[dict[str, object]]) -> list[EvidenceEnvelope]:
                 f"row {str(row['row_key'])[:12]} carries no envelope_json; "
                 "rebuild the mart with `climate-resilience mart`"
             )
-        envelopes.append(EvidenceEnvelope.model_validate_json(str(raw)))
-    return envelopes
+        pairs.append(
+            (str(row["row_key"]), EvidenceEnvelope.model_validate_json(str(raw)))
+        )
+    return pairs
 
 
 def _available(engine: Engine, indicator_id: str | None = None) -> Available:
@@ -145,15 +150,15 @@ def get_indicator(
             available=_available(engine, indicator_id),
         )
 
-    envelopes = _envelopes(rows)
-    mechanisms = {envelope.mechanism for envelope in envelopes if envelope.mechanism}
+    pairs = _pairs(rows)
+    mechanisms = {envelope.mechanism for _, envelope in pairs if envelope.mechanism}
     message = None
     if len(mechanisms) > 1:
         message = (
             "riverine and coastal rows are separate and must never be summed "
             "into one flood metric"
         )
-    return ToolOutput.evidence(envelopes, message=message)
+    return ToolOutput.evidence(pairs, message=message)
 
 
 def rank_scopes(
@@ -230,7 +235,7 @@ def rank_scopes(
     else:
         chosen = _rank(rows, order)[: min(limit, MAX_RANK_LIMIT)]
 
-    return ToolOutput.evidence(_envelopes(chosen), message="; ".join(notes) or None)
+    return ToolOutput.evidence(_pairs(chosen), message="; ".join(notes) or None)
 
 
 def _rank(rows: list[dict[str, object]], order: str) -> list[dict[str, object]]:
@@ -256,7 +261,7 @@ def explain(engine: Engine, *, row_key: str) -> ToolOutput:
             f"no published row with key {row_key!r}",
             missing=["a valid row_key from a previous tool result"],
         )
-    return ToolOutput.evidence(_envelopes(rows))
+    return ToolOutput.evidence(_pairs(rows))
 
 
 def resolve_scope(engine: Engine, *, query: str) -> ToolOutput:

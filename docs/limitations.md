@@ -83,6 +83,24 @@ output's `quality.warnings`.
   combined number would be invented. The assistant must abstain on vulnerability
   questions and say why.
 
+## Assistant
+
+- **Not measured.** Latency, cost per question and tool-selection accuracy need
+  `OPENROUTER_API_KEY`; without it the test suite exercises orchestration with a
+  scripted model, which proves the plumbing and not the model's judgement.
+- **The guard is keyword-based.** It refuses pluvial and unmeasured-dataset
+  questions before any model call. A phrasing it misses still reaches tools that
+  cannot answer it, so the failure mode is a slower refusal rather than a wrong
+  answer — but it can also refuse an answerable question phrased unusually.
+- **One model, no tiering.** The two-request design is a single agent run; a
+  small intent model and a larger synthesis model cannot be mixed within it.
+- **No response cache.** Repeated questions cost the same as first ones.
+- **A validation failure costs the run.** If the model returns an uncited
+  answer twice, the second request is consumed and the result is an abstention.
+  That is the intended trade, and it is visible in the `error` field.
+- **The caveat post-check is textual.** It guarantees the words "pluvial" appear
+  in a flood answer; it cannot guarantee the rest of the sentence is right.
+
 ## Documents (RAG)
 
 - **One document is indexed.** The Durban Climate Action Plan 2019. Retrieval

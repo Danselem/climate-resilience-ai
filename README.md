@@ -6,11 +6,12 @@ An analytical system, not a chatbot: every number is computed deterministically,
 carries its provenance, and can be reproduced from a recorded manifest. A
 language model may later explain those numbers; it may never calculate them.
 
-**Status: analytical pipeline complete; document retrieval in progress.**
-Heat, population exposure and flood exposure (riverine and coastal) end to end
-on real data, plus a validated ward boundary layer. The document index (RAG)
-is built and holds the Durban Climate Action Plan; the agent that queries both
-is not built yet. Vulnerability is blocked on a bulk Census 2022 source. See
+**Status: agent built, not yet measured.** Heat, population exposure and flood
+exposure end to end on real data, a validated ward boundary layer, a document
+index holding the Durban Climate Action Plan, and a Pydantic AI agent that
+queries both. The agent is tested offline; its latency, cost and retrieval
+accuracy need an OpenRouter key and have not been measured. Vulnerability is
+blocked on a bulk Census 2022 source. See
 [`docs/limitations.md`](docs/limitations.md) before reading any result.
 
 - Specification: [`climate-resilience.md`](climate-resilience.md)
@@ -98,6 +99,43 @@ the northern reaches near Tongaat — the same rivers JICA's 2025 Durban survey
 and the Presidential Climate Commission's 2022 flood analysis name, and the
 corridors where Springer (2025) places the highest-risk informal settlements.
 That is a placement check, not a validation of magnitude.
+
+### Assistant
+
+One agent, two tool families: exact values from the mart, prose from the
+documents. It never calculates — every number is a mart row, restated with its
+envelope.
+
+```bash
+uv run climate-resilience ask "Which wards have the largest share of area exposed to a 100-year riverine flood?"
+uv run climate-resilience ask "How many people are exposed to pluvial flooding in ward 75?"
+```
+
+The second returns without spending a token:
+
+```
+Pluvial (surface-water) flooding is not modelled. The platform covers riverine
+and coastal flooding only; the April 2022 KwaZulu-Natal damage was largely
+pluvial, and no open metro-scale dataset exists for it (I9).
+
+missing:
+  - a pluvial flood hazard layer
+
+requests=0 tokens=0/0 guard=True
+```
+
+Three guarantees are structural, not prompt requests
+([ADR-012](docs/adr/012-agent-budget-and-grounding.md)):
+
+| Guarantee | Enforced by |
+|---|---|
+| ≤ 2 model calls, ≤ 3 tool calls | `UsageLimits`, raised by the runtime |
+| Every number cited | `Answer` validator rejects an uncited answer |
+| Flood answers carry the pluvial caveat | post-check appends it if the model omits it |
+
+Tools: `get_indicator`, `rank_scopes`, `resolve_scope`, `coverage`, `explain`,
+`search_documents`. Results are trimmed to ten rows so one question cannot pull
+the whole mart into the prompt.
 
 ### Documents (RAG)
 
@@ -257,6 +295,8 @@ stage order or failure policy fails CI without a 150 MB download.
 | `indicators/flood.py` | Area-fraction and population-in-zone maths, pluvial refused |
 | `tools/mart_tools.py` | Five read-only tools over the mart; evidence or typed refusal |
 | `rag/` | Document catalogue, Docling chunking, pgvector store, hybrid retrieval |
+| `assistant/agent.py` | Pydantic AI agent, budget, tool registration, caveat post-check |
+| `assistant/guard.py` | Pre-flight refusal for pluvial and unmeasured questions |
 | `mart/` | Precomputed rows carrying evidence envelopes |
 | `envelope.py` | The contract that makes traceability enforceable |
 | `manifest.py` | Input/output hashing and run records |
