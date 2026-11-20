@@ -83,6 +83,28 @@ output's `quality.warnings`.
   combined number would be invented. The assistant must abstain on vulnerability
   questions and say why.
 
+## Documents (RAG)
+
+- **One document is indexed.** The Durban Climate Action Plan 2019. Retrieval
+  quality cannot be claimed from a corpus this size, and the evaluation harness
+  has not run.
+- **GreenBook is excluded on licence grounds.** CC BY-NC-SA 3.0 ZA is
+  NonCommercial and ShareAlike; a commercial derived index cannot honour it
+  without written permission from CSIR.
+- **The CAP names no wards.** All 156 extracted chunks are municipal, so a
+  ward-level question about the plan returns city-wide text, labelled as such.
+  That is a property of the document, not a retrieval failure, and it must not
+  be reported as if the plan spoke to a ward.
+- **Ingestion is slow and batch-only.** Six minutes for a 6.1 MB PDF, dominated
+  by Docling layout analysis and OCR. Acceptable for ten documents, never at
+  query time.
+- **No reranker, and no evidence that one is needed.** Fusion is reciprocal
+  rank with no learned weight; that is a defensible default, not a measured
+  optimum.
+- **The document index is not the analytical engine.** No published number is
+  derived from retrieved text, and the boundary is enforced by having two
+  stores rather than one.
+
 ## Flood
 
 - **Pluvial (surface-water) flooding is not modelled.** This is the mechanism

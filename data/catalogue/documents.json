@@ -1,6 +1,21 @@
 {
   "documents": [
     {
+      "id": "durban-cap-2019",
+      "title": "Durban Climate Action Plan 2019",
+      "publisher": "eThekwini Municipality, Environmental Planning & Climate Protection Department",
+      "source_url": "https://www.durban.gov.za/uploads/0000/6/2025/09/24/climateactionplanweb.pdf",
+      "licence": "public municipal document; cited, not redistributed",
+      "version": "2019",
+      "status": "active",
+      "retrieved_at": "2026-11-20",
+      "checksum": "63ca783fe0cb6af7e9baa3a93f644ab1fd60340d7964e540ec0ff2b6f85f6398",
+      "artifact": "raw/documents/durban-cap-2019.pdf",
+      "scope_level": "municipality",
+      "scope_ids": ["ethekwini"],
+      "notes": "Adopted by Council 2019. 33 actions, 149 sub-actions. Contains the flooding and sea-level-rise action areas."
+    },
+    {
       "id": "greenbook-ethekwini",
       "title": "GreenBook municipal risk profile — eThekwini",
       "publisher": "CSIR",

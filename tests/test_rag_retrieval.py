@@ -66,25 +66,27 @@ def test_fusion_respects_k() -> None:
 
 @pytest.fixture
 def connection() -> Iterator[Any]:
+    """A scratch schema, so tests never see or disturb the real corpus."""
     try:
         conn = store.connect(DSN)
     except Exception as error:  # noqa: BLE001 - skipped, not swallowed
         pytest.skip(f"pgvector database unavailable: {error}")
+    with conn.cursor() as cursor:
+        cursor.execute("create extension if not exists vector")
+        cursor.execute("create schema if not exists rag_test")
+        cursor.execute("set search_path to rag_test, public")
+    conn.commit()
     store.ensure_schema(conn, dimension=DIMENSION)
-    _clean(conn)
     try:
+        with conn.cursor() as cursor:
+            cursor.execute("truncate document_chunk")
+        conn.commit()
         yield conn
     finally:
-        _clean(conn)
+        with conn.cursor() as cursor:
+            cursor.execute("truncate document_chunk")
+        conn.commit()
         conn.close()
-
-
-def _clean(conn: Any) -> None:
-    with conn.cursor() as cursor:
-        cursor.execute(
-            "delete from document_chunk where document_id like 'test-%'"
-        )
-    conn.commit()
 
 
 def chunk(

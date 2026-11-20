@@ -6,11 +6,12 @@ An analytical system, not a chatbot: every number is computed deterministically,
 carries its provenance, and can be reproduced from a recorded manifest. A
 language model may later explain those numbers; it may never calculate them.
 
-**Status: Phase 4 flood hazard complete.** Heat, population exposure and flood
-exposure (riverine and coastal) end to end on real data, plus a validated ward
-boundary layer. Vulnerability is blocked on a bulk Census 2022 source and is
-deliberately not published. See [`docs/limitations.md`](docs/limitations.md)
-before reading any result.
+**Status: analytical pipeline complete; document retrieval in progress.**
+Heat, population exposure and flood exposure (riverine and coastal) end to end
+on real data, plus a validated ward boundary layer. The document index (RAG)
+is built and holds the Durban Climate Action Plan; the agent that queries both
+is not built yet. Vulnerability is blocked on a bulk Census 2022 source. See
+[`docs/limitations.md`](docs/limitations.md) before reading any result.
 
 - Specification: [`climate-resilience.md`](climate-resilience.md)
 - Agent and quality rules: [`AGENTS.md`](AGENTS.md)
@@ -98,6 +99,38 @@ and the Presidential Climate Commission's 2022 flood analysis name, and the
 corridors where Springer (2025) places the highest-risk informal settlements.
 That is a placement check, not a validation of magnitude.
 
+### Documents (RAG)
+
+Prose goes in a vector index, measurements stay in the mart. The index holds
+plans, strategies and dataset documentation; it never holds a climate value.
+
+```bash
+docker compose up -d db          # Postgres with PostGIS + pgvector
+uv run climate-resilience documents
+uv run climate-resilience search "sea level rise and coastal protection"
+```
+
+```
+  durban-cap-2019                156 chunks  63ca783fe0cb
+indexed       : 1 document(s)
+
+durban-cap-2019 p.62 [municipality] Loss of ecosystem & biodiversity
+  score 0.0323  dense=1 lexical=3
+```
+
+Three constraints are structural:
+
+- **GreenBook is excluded.** CC BY-NC-SA 3.0 ZA is NonCommercial and
+  ShareAlike, which a commercial derived index cannot honour. Recorded in
+  `data/catalogue/documents.json`, never ingested
+  ([ADR-011](docs/adr/011-rag-supporting-layer.md)).
+- **A chunk is ward-scoped only if it names a ward.** The CAP names none, so
+  all 156 chunks are municipal and a ward question returns municipal context
+  labelled as such.
+- **Retrieval is hybrid**: dense cosine plus Postgres full-text, fused by
+  reciprocal rank. Dense finds paraphrase, lexical finds "RCP8.5" and ward
+  numbers.
+
 ### Census ward population (Phase 3, not joined)
 
 Census 2022 ward totals are ingested with their official codes: 111 eThekwini
@@ -157,6 +190,7 @@ uv run climate-resilience climate      # ERA5-derived daily Tmax
 uv run climate-resilience worldpop     # WorldPop 1 km clipped to eThekwini
 uv run climate-resilience census       # Census 2022 ward population (not joined)
 uv run climate-resilience flood        # Aqueduct baseline layers, clipped
+uv run climate-resilience documents    # chunk + index catalogue documents
 uv run climate-resilience mart         # heat rows + manifest + snapshot
 uv run climate-resilience exposure     # population exposure rows
 uv run climate-resilience flood-exposure  # flood rows
@@ -221,6 +255,8 @@ stage order or failure policy fails CI without a 150 MB download.
 | `exposure.py` | WorldPop → ward and municipality population, separate from hazard |
 | `flood.py` | Aqueduct → ward and municipality flood exposure, per mechanism |
 | `indicators/flood.py` | Area-fraction and population-in-zone maths, pluvial refused |
+| `tools/mart_tools.py` | Five read-only tools over the mart; evidence or typed refusal |
+| `rag/` | Document catalogue, Docling chunking, pgvector store, hybrid retrieval |
 | `mart/` | Precomputed rows carrying evidence envelopes |
 | `envelope.py` | The contract that makes traceability enforceable |
 | `manifest.py` | Input/output hashing and run records |

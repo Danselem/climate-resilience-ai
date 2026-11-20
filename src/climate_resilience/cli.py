@@ -28,6 +28,7 @@ from .pipeline import (
     load_or_fetch_municipality,
     plan_cells,
 )
+from .rag.ingest import ingest_all
 from .store import repository
 
 app = typer.Typer(no_args_is_help=True, add_completion=False)
@@ -120,6 +121,56 @@ def exposure() -> None:
     typer.echo(f"rows          : {summary.rows}")
     typer.echo(f"content_hash  : {summary.content_hash}")
     typer.echo(f"snapshot      : {summary.snapshot_path}")
+
+
+@app.command()
+def documents(
+    only: str | None = typer.Option(None, help="Ingest a single document id"),
+) -> None:
+    """Chunk and index catalogue documents into pgvector."""
+    settings = get_settings()
+    results = ingest_all(settings, only=only)
+    if not results:
+        typer.echo("no active documents in data/catalogue/documents.json")
+        raise typer.Exit(code=0)
+    for result in results:
+        typer.echo(
+            f"  {result.document_id:<28} {result.chunks:>5} chunks  "
+            f"{result.checksum[:12]}"
+        )
+    typer.echo(f"indexed       : {len(results)} document(s)")
+
+
+@app.command()
+def search(
+    query: str = typer.Argument(..., help="Text to search for"),
+    scope: str | None = typer.Option(None, help="Ward or municipality id"),
+    limit: int = typer.Option(5, help="Number of chunks to show"),
+) -> None:
+    """Search the document index (hybrid dense + lexical)."""
+    from .rag.embeddings import get_embedder
+    from .rag.retrieval import hybrid_search
+    from .rag.store import connect
+
+    settings = get_settings()
+    connection = connect(settings.documents_dsn)
+    try:
+        hits = hybrid_search(
+            connection, get_embedder(), query, k=limit, scope_id=scope
+        )
+    finally:
+        connection.close()
+    if not hits:
+        typer.echo("no matching chunk")
+        raise typer.Exit(code=0)
+    for hit in hits:
+        location = f"p.{hit.page_no}" if hit.page_no else "p.?"
+        heading = " > ".join(hit.headings) if hit.headings else "no heading"
+        typer.echo(
+            f"\n{hit.document_id} {location} [{hit.scope_level}] {heading}"
+        )
+        typer.echo(f"  score {hit.score:.4f}  dense={hit.dense_rank} lexical={hit.lexical_rank}")
+        typer.echo(f"  {hit.text[:300].replace(chr(10), ' ')}")
 
 
 @app.command()
