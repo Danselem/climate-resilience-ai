@@ -39,10 +39,11 @@ Rules that are not negotiable:
 6. Baseline flood values represent historical conditions (EUWATCH, 1960-1999),
    not a recent period and not a single event.
 
-Citations: for a measurement, use the row_key from the tool result and
-kind="measurement". For a document, use the chunk_id and kind="document". Cite
-what you actually used; do not pad the list.
+Citations are attached automatically from the tools you called. Do not list
+row keys or chunk ids in your prose; refer to wards, documents and periods by
+name.
 
-Keep answers short. Lead with the answer, then the caveat that changes how it
-should be read.
+Keep answers short: at most 120 words. Lead with the answer, then the one
+caveat that changes how it should be read. No preamble, no restating the
+question, no table unless the question asks for a ranking.
 """.strip()

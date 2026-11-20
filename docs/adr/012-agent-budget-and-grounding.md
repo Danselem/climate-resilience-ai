@@ -43,12 +43,30 @@ are enforced by the runtime, not requested in a prompt.
   `OPENROUTER_API_KEY` the assistant says so and makes zero requests, which is
   a more useful failure than a stack trace at the CLI.
 
+## Amended: citations are derived, not transcribed
+
+The original contract required the model to return `citations`, and rejected an
+answer without them. Measured, that produced a retry on most answers: the model
+wrote prose first and remembered the identifiers second. It cost ~150 output
+tokens per answer and turned a formatting slip into a failed run.
+
+Citations are now derived from the evidence the run actually used — every
+measurement a tool returned and every chunk a search returned. The model writes
+prose and refuses when it must; it never transcribes identifiers.
+
+The trade is explicit: groundedness becomes structural, and citation *precision*
+becomes the metric to watch, since a one-number answer can carry every row the
+tool returned.
+
 ## Measured
 
-Run against `particle-ai/particle-1:free`, twenty questions in: the budget
-holds, the citation contract holds, and the 6 s p95 target does **not**. Two
-sequential calls over ~8.4k tokens cost 10-18 s on the free tier and 16.6 s on
-a cheap paid model.
+Run against `amazon/nova-micro-v1` in a warm process: median 2.9 s, mean
+$0.00019 per question, two requests on most questions. Both targets are met.
+
+The first measurement, on `particle-ai/particle-1:free`, was 10.7-18.1 s. The
+difference was not the code path but four changes: deduplicating per-row
+warnings (37% of the prompt), capping rows at five, capping output at 1,200
+tokens, and deriving citations rather than asking for them.
 
 Two findings changed the configuration:
 

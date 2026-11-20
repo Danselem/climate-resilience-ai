@@ -85,29 +85,27 @@ output's `quality.warnings`.
 
 ## Assistant
 
-- **Latency misses the target.** Measured on `particle-ai/particle-1:free`:
-  10.7 s for an analytical question, 18.1 s for a document question, against a
-  6 s p95 target. Two sequential model calls on a free endpoint dominate; the
-  tool work is milliseconds. Faster models are the lever, not code.
-- **Cost is measured as zero, which is technically true and practically
-  useless.** The free model prices at $0. The $0.004/question target is
-  therefore untested against a paid model, where the same token counts would
-  cost roughly $0.0003.
-- **Token count is inflated by per-row detail.** 8,939 input tokens for a
-  five-row ranking, because every row carries its licence list and warnings.
-  That is the first thing to trim if latency matters more than per-row detail.
+- **Latency is inside target only on a faster model.** `amazon/nova-micro-v1`
+  answers in 1.6-3.8 s; the free fallback takes 10-18 s. Cold-start document
+  questions add ~8 s to load the embedding model. The 6 s p95 applies to a warm
+  process, which is how it deploys, and that is the configuration measured.
+- **Citations over-report.** They are derived from every measurement and chunk
+  the run touched, not from what the prose actually used. Groundedness is
+  therefore guaranteed and citation *precision* is not; a one-number answer can
+  carry ten references. Precision and completeness must be scored separately in
+  the evaluation, and precision will be the weaker one.
+- **Cost is measured, not estimated.** $0.00019 per question on nova-micro
+  against a $0.004 target. The free fallback prices at zero, which is true and
+  not representative of a paid deployment.
 - **Tool-selection accuracy is not measured.** Two questions were checked by
   hand; the gold set does not exist yet.
-- **The two-request budget is not universally satisfiable.** Some models
-  implement tool calls correctly and still need a third round to emit the
-  structured `final_result`; those runs end as `UsageLimitExceeded`. Both
-  defaults were verified to finish in two requests, but any new model has to be
-  tested for that specifically. `gpt-oss-20b` refused to call a tool at all;
-  `mistral-nemo` and `nova-micro` both needed a third request.
-- **8.4k input tokens per question is the latency driver, not just the
-  endpoint.** Most of it is per-row detail — licences and warning lists
-  repeated on every measurement. Trimming that is the first optimisation, and
-  it has not been done.
+- **The request ceiling is three, not two.** Most questions finish in two; a
+  model that self-corrects needs a third, and failing outright costs more than
+  the extra call. `gpt-oss-20b` refused to call a tool at all; `llama-3.1-8b`
+  needed three rounds and still failed.
+- **Input tokens are not the latency driver.** Halving them (8,939 → 4,400)
+  left latency unchanged. Output tokens and provider throughput dominate, which
+  is why the answer is capped and the model is fast rather than large.
 - **The guard is keyword-based.** It refuses pluvial and unmeasured-dataset
   questions before any model call. A phrasing it misses still reaches tools that
   cannot answer it, so the failure mode is a slower refusal rather than a wrong

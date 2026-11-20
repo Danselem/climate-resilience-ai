@@ -11,8 +11,8 @@ and a multilingual model would cost ~5x the memory for no measured gain here.
 
 from __future__ import annotations
 
+import threading
 from collections.abc import Sequence
-from functools import lru_cache
 from typing import Protocol
 
 MODEL_ID = "sentence-transformers/all-MiniLM-L6-v2"
@@ -73,6 +73,15 @@ class HashingEmbedder:
         return vectors
 
 
-@lru_cache(maxsize=1)
+_embedder: LocalEmbedder | None = None
+_embedder_lock = threading.Lock()
+
+
 def get_embedder() -> LocalEmbedder:
-    return LocalEmbedder()
+    """Load the model once, even when a warm-up thread races the first query."""
+    global _embedder
+    if _embedder is None:
+        with _embedder_lock:
+            if _embedder is None:
+                _embedder = LocalEmbedder()
+    return _embedder

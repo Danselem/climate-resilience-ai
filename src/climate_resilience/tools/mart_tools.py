@@ -24,9 +24,6 @@ from .models import Available, ScopeRef, ToolOutput
 
 MAX_RANK_LIMIT = 200
 WARD_PATTERN = re.compile(r"ward\s*0*(\d{1,3})", re.IGNORECASE)
-# Presentation order, not priority: riverine is the mechanism that produces
-# non-zero exposure here, so it should not sit below a column of coastal zeros.
-MECHANISM_ORDER = ("riverine", "coastal")
 
 
 def _rows(engine: Engine, stmt: Select) -> list[dict[str, object]]:
@@ -218,19 +215,21 @@ def rank_scopes(
             f"ranked on the latest published period ({latest.year})"
         )
 
-    chosen: list[dict[str, object]]
     if spec.hazard_type == "flood" and mechanism is None:
-        # Rank inside each mechanism. Sorting the union would silently compare
-        # a riverine depth cell with a coastal one and invite a sum.
+        # Rank inside each mechanism rather than across them. Sorting the union
+        # would compare a riverine cell with a coastal one and invite a sum;
+        # requiring the caller to choose costs an extra model request, which
+        # the two-request budget cannot spare.
         grouped: dict[str, list[dict[str, object]]] = {}
         for row in rows:
             grouped.setdefault(str(row["mechanism"]), []).append(row)
+        share = max(1, min(limit, MAX_RANK_LIMIT) // len(grouped))
         chosen = []
-        for name in sorted(grouped, key=_mechanism_sort_key):
-            chosen.extend(_rank(grouped[name], order)[: min(limit, MAX_RANK_LIMIT)])
+        for name in sorted(grouped):
+            chosen.extend(_rank(grouped[name], order)[:share])
         notes.append(
-            f"up to {limit} rows per mechanism; riverine and coastal are ranked "
-            "separately and must never be added together"
+            "riverine and coastal are ranked separately, "
+            "up to 2 rows each, and must never be added together"
         )
     else:
         chosen = _rank(rows, order)[: min(limit, MAX_RANK_LIMIT)]
@@ -242,12 +241,6 @@ def _rank(rows: list[dict[str, object]], order: str) -> list[dict[str, object]]:
     return sorted(
         rows, key=lambda row: float(row["value"]), reverse=order == "desc"
     )
-
-
-def _mechanism_sort_key(name: str) -> tuple[int, str]:
-    if name in MECHANISM_ORDER:
-        return (MECHANISM_ORDER.index(name), name)
-    return (len(MECHANISM_ORDER), name)
 
 
 def explain(engine: Engine, *, row_key: str) -> ToolOutput:

@@ -151,25 +151,43 @@ def test_a_flood_ranking_requires_a_return_period(engine) -> None:
     assert 100 in result.available.return_periods
 
 
-def test_riverine_and_coastal_are_ranked_separately(engine) -> None:
+def test_a_flood_ranking_never_ranks_across_mechanisms(engine) -> None:
     seed_flood(
         engine,
         [
             flood_row("ethekwini-001", mechanism="riverine", value=40.0),
             flood_row("ethekwini-002", mechanism="riverine", value=20.0),
-            flood_row("ethekwini-001", mechanism="coastal", value=0.0),
+            flood_row("ethekwini-001", mechanism="coastal", value=99.0),
         ],
     )
 
     result = rank_scopes(engine, indicator_id=FLOOD_AREA, return_period_years=100)
 
     assert result.status == "ok"
-    assert {envelope.mechanism for envelope in result.envelopes} == {
-        "riverine",
-        "coastal",
-    }
+    mechanisms = [envelope.mechanism for envelope in result.envelopes]
+    # Grouped, never interleaved: a coastal 99 must not outrank a riverine 40.
+    assert mechanisms == sorted(mechanisms)
     assert result.message is not None
     assert "never be added" in result.message
+
+
+def test_a_flood_ranking_returns_only_the_requested_mechanism(engine) -> None:
+    seed_flood(
+        engine,
+        [
+            flood_row("ethekwini-001", mechanism="riverine", value=40.0),
+            flood_row("ethekwini-002", mechanism="riverine", value=20.0),
+            flood_row("ethekwini-001", mechanism="coastal", value=99.0),
+        ],
+    )
+
+    result = rank_scopes(
+        engine, indicator_id=FLOOD_AREA, return_period_years=100, mechanism="riverine"
+    )
+
+    assert result.status == "ok"
+    assert {envelope.mechanism for envelope in result.envelopes} == {"riverine"}
+    assert [envelope.value for envelope in result.envelopes] == [40.0, 20.0]
 
 
 def test_ranking_uses_the_latest_period_rather_than_mixing_years(engine) -> None:

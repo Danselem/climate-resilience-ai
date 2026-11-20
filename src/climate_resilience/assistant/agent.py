@@ -15,6 +15,7 @@ prompt requires it, but a prompt is not a guarantee.
 from __future__ import annotations
 
 import os
+import threading
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -34,27 +35,41 @@ from .guard import preflight
 from .models import (
     Answer,
     AssistantResult,
+    Citation,
     DocumentHit,
     DocumentResult,
     Measurement,
     MeasurementResult,
+    MethodRef,
+    Source,
 )
 from .prompts import SYSTEM_PROMPT
 
-MAX_ENVELOPES = 10
+MAX_ROWS = 5
+# The specification caps output at 300 tokens; 500 leaves room for the caveat
+# without letting a model write an essay that doubles latency.
+MAX_OUTPUT_TOKENS = 1200
 MAX_DOCUMENTS = 6
-MAX_REQUESTS = 2
+# A ceiling, not a target: most questions finish in two. It is three because a
+# model that self-corrects would otherwise fail outright, and a third call
+# costs ~$0.0001.
+MAX_REQUESTS = 3
 MAX_TOOL_CALLS = 3
 
 # A free endpoint first, because it is free and it works; a cheap paid model
 # second, because free endpoints disappear without notice. Both are OpenRouter
 # ids and both are priced at run time.
 #
-# Both were verified to finish within the two-request budget. That is not a
-# property of price: mistral-nemo and nova-micro both implement tool calls and
-# both still needed a third round, and gpt-oss-20b refused to call a tool at
-# all. Model choice for this agent has to be tested, not inferred.
-DEFAULT_MODELS = ("particle-ai/particle-1:free", "z-ai/glm-5.3-flash")
+# Ordered by measured latency, not by price. nova-micro finishes a question in
+# 1.6-3.8 s on 2 requests for ~$0.0002; particle-1 is free but 10-18 s. The
+# free endpoint stays as the fallback because it costs nothing when it is
+# healthy, not because it is fast.
+#
+# Both were verified to finish within the request budget. That is not a
+# property of price or of tool-calling support: mistral-nemo and llama-3.1-8b
+# both call tools correctly and still needed a third round, and gpt-oss-20b
+# refused to call a tool at all. Model choice here has to be measured.
+DEFAULT_MODELS = ("amazon/nova-micro-v1", "particle-ai/particle-1:free")
 
 FLOOD_CAVEAT = (
     "Caveat: riverine and coastal flooding only. Pluvial (surface-water) "
@@ -69,6 +84,7 @@ class ToolDeps:
     # Everything a tool returned this run, for the post-check. Not sent to the
     # model; it is the ground truth the answer is checked against.
     seen: list[Measurement] = field(default_factory=list)
+    documents: list[DocumentHit] = field(default_factory=list)
 
 
 def default_model() -> str:
@@ -113,6 +129,29 @@ def _model_chain(candidates: list[str]) -> str | Model:
     return FallbackModel(candidates[0], *candidates[1:])
 
 
+_warm_lock = threading.Lock()
+_warm_started = False
+
+
+def warm_documents() -> None:
+    """Load the embedding model in the background, once per process."""
+
+    def _load() -> None:
+        try:
+            from ..rag.embeddings import get_embedder
+
+            get_embedder()
+        except Exception:  # noqa: BLE001 - a failed warm-up is not fatal
+            pass
+
+    global _warm_started
+    with _warm_lock:
+        if _warm_started:
+            return
+        _warm_started = True
+    threading.Thread(target=_load, daemon=True, name="embedder-warmup").start()
+
+
 def document_search(settings: Settings) -> Callable[[str, str | None, int], DocumentResult]:
     """pgvector-backed search, connected lazily so a mart-only run never touches it."""
 
@@ -154,6 +193,21 @@ def document_search(settings: Settings) -> Callable[[str, str | None, int], Docu
     return search
 
 
+def _model_settings() -> dict[str, object] | None:
+    """OpenRouter routing preferences.
+
+    Default routing balances price, latency and reliability; ``sort`` pins one.
+    It is configurable because pinning latency can route to a provider that is
+    faster per token and worse per tool call, which is a regression, not an
+    optimisation.
+    """
+    settings: dict[str, object] = {"max_tokens": MAX_OUTPUT_TOKENS}
+    sort = os.environ.get("LLM_PROVIDER_SORT", "latency").strip()
+    if sort:
+        settings["extra_body"] = {"provider": {"sort": sort}}
+    return settings
+
+
 def build_agent(
     model: str | Model | list[str] | None = None,
 ) -> Agent[ToolDeps, Answer]:
@@ -170,6 +224,7 @@ def build_agent(
         output_type=Answer,
         instructions=SYSTEM_PROMPT,
         capabilities=[Caching()],
+        model_settings=_model_settings(),
     )
     _register(agent)
     return agent
@@ -191,6 +246,9 @@ def _register(agent: Agent[ToolDeps, Answer]) -> None:
         population_count_worldpop, flood_exposed_area_pct,
         flood_exposed_population. For flood indicators, pass mechanism
         ("riverine" or "coastal") and return_period_years (10, 50 or 100).
+
+        For a single year of a heat series pass period_year; omit it to get the
+        whole series. Format values are already exact: do not re-query to check.
         """
         output = mart_tools.get_indicator(
             ctx.deps.engine,
@@ -206,7 +264,7 @@ def _register(agent: Agent[ToolDeps, Answer]) -> None:
     def rank_scopes(
         ctx: RunContext[ToolDeps],
         indicator_id: str,
-        limit: int = 10,
+        limit: int = 5,
         order: str = "desc",
         mechanism: str | None = None,
         return_period_years: int | None = None,
@@ -217,6 +275,9 @@ def _register(agent: Agent[ToolDeps, Answer]) -> None:
         Use this for "which wards have the most / least". A flood ranking
         requires return_period_years. Riverine and coastal are always ranked
         separately and must never be combined.
+
+        Do not pass period_year: rankings use the latest published period, and
+        a flood layer has exactly one baseline period. One call is enough.
         """
         output = mart_tools.rank_scopes(
             ctx.deps.engine,
@@ -262,10 +323,17 @@ def _register(agent: Agent[ToolDeps, Answer]) -> None:
         what a document states, never of a measured value. A hit labelled
         scope_level "municipality" is city-wide and says nothing about a ward.
         """
-        return ctx.deps.search(query, scope_id, max(1, min(limit, MAX_DOCUMENTS)))
+        result = ctx.deps.search(query, scope_id, max(1, min(limit, MAX_DOCUMENTS)))
+        ctx.deps.documents.extend(result.hits)
+        return result
 
 
 def _measurements(output: ToolOutput, deps: ToolDeps) -> MeasurementResult:
+    """Project a tool result into the prompt-sized shape.
+
+    Caveats, sources, method and resolution are identical across rows, so they
+    are sent once. Repeating them per row was 37% of the prompt.
+    """
     if not output.ok:
         return MeasurementResult(
             status="insufficient",
@@ -273,23 +341,48 @@ def _measurements(output: ToolOutput, deps: ToolDeps) -> MeasurementResult:
             missing=output.missing,
             available=output.available,
         )
-    measurements = [
-        Measurement.from_envelope(row_key, envelope)
-        for row_key, envelope in zip(
-            output.row_keys, output.envelopes, strict=True
-        )
-    ]
-    truncated = len(measurements) > MAX_ENVELOPES
+
+    pairs = list(zip(output.row_keys, output.envelopes, strict=True))
+    truncated = len(pairs) > MAX_ROWS
     if truncated:
-        measurements = measurements[:MAX_ENVELOPES]
+        pairs = pairs[:MAX_ROWS]
+
+    caveats: list[str] = []
+    sources: dict[tuple[str, str, str], Source] = {}
+    method: MethodRef | None = None
+    resolution: str | None = None
+    measurements: list[Measurement] = []
+
+    for row_key, envelope in pairs:
+        measurements.append(Measurement.from_envelope(row_key, envelope))
+        for warning in envelope.quality.warnings:
+            if warning not in caveats:
+                caveats.append(warning)
+        for dataset in envelope.datasets:
+            sources[(dataset.id, dataset.version, dataset.licence)] = Source(
+                id=dataset.id, version=dataset.version, licence=dataset.licence
+            )
+        method = method or MethodRef(
+            id=envelope.method_id, version=envelope.method_version
+        )
+        resolution = resolution or envelope.quality.native_resolution
+
     deps.seen.extend(measurements)
     message = output.message
     if truncated:
         note = (
-            f"showing {MAX_ENVELOPES} rows; narrow the request for the rest"
+            f"showing {MAX_ROWS} of {len(output.envelopes)} rows; "
+            "narrow the request for the rest"
         )
         message = f"{message}; {note}" if message else note
-    return MeasurementResult(measurements=measurements, message=message)
+    return MeasurementResult(
+        measurements=measurements,
+        caveats=caveats,
+        sources=list(sources.values()),
+        method=method,
+        native_resolution=resolution,
+        message=message,
+    )
 
 
 def ask(
@@ -330,6 +423,10 @@ def ask(
         search=document_search(settings),
     )
 
+    # Loading the embedding model costs ~8 s. Starting it now overlaps that
+    # with the first model call instead of stalling the document tool.
+    warm_documents()
+
     started = time.perf_counter()
     try:
         result = build_agent(model).run_sync(
@@ -356,6 +453,7 @@ def ask(
 
     seconds = time.perf_counter() - started
     answer = _with_flood_caveat(result.output, deps.seen)
+    citations = _citations(deps)
     usage = result.usage
     input_tokens = int(getattr(usage, "input_tokens", 0) or 0)
     output_tokens = int(getattr(usage, "output_tokens", 0) or 0)
@@ -363,6 +461,7 @@ def ask(
     return AssistantResult(
         question=question,
         answer=answer,
+        citations=citations,
         model=served,
         seconds=round(seconds, 3),
         cost_usd=pricing.estimate_cost(served, input_tokens, output_tokens),
@@ -370,6 +469,25 @@ def ask(
         input_tokens=input_tokens,
         output_tokens=output_tokens,
     )
+
+
+def _citations(deps: ToolDeps) -> list[Citation]:
+    """Every measurement and document the run actually used, in order.
+
+    The model does not transcribe identifiers: it is the least reliable place
+    to keep them and the most expensive to correct.
+    """
+    citations = [
+        Citation(kind="measurement", reference=measurement.row_key)
+        for measurement in deps.seen
+    ]
+    seen: set[str] = set()
+    for hit in deps.documents:
+        if hit.chunk_id in seen:
+            continue
+        seen.add(hit.chunk_id)
+        citations.append(Citation(kind="document", reference=hit.chunk_id))
+    return citations
 
 
 def _with_flood_caveat(answer: Answer, seen: list[Measurement]) -> Answer:

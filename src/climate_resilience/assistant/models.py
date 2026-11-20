@@ -20,24 +20,31 @@ CitationKind = Literal["measurement", "document"]
 
 class Citation(BaseModel):
     kind: CitationKind
-    """``measurement`` is a mart row_key; ``document`` is a chunk id."""
+    """``measurement`` is a mart row_key; ``document`` is a chunk id.
+
+    There is deliberately no free-text ``note``. Models filled it with a
+    sentence per citation, which was a third of the output tokens and added
+    nothing the envelope does not already hold.
+    """
 
     reference: str
-    note: str | None = None
 
 
 class Answer(BaseModel):
+    """What the model produces: prose and, if it must refuse, the gap.
+
+    Citations are deliberately absent. Asking the model to transcribe row_keys
+    cost ~150 output tokens per answer and produced a retry whenever it forgot,
+    which is a validation failure caused by asking the wrong component to do
+    the work. Citations are derived from the evidence the run actually used.
+    """
+
     text: str
-    citations: list[Citation] = Field(default_factory=list)
     abstained: bool = False
     missing: list[str] = Field(default_factory=list)
 
     @model_validator(mode="after")
-    def _grounded(self) -> Answer:
-        if not self.abstained and not self.citations:
-            raise ValueError(
-                "a non-abstained answer must cite a measurement or a document"
-            )
+    def _refusal_names_the_gap(self) -> Answer:
         if self.abstained and not self.missing:
             raise ValueError(
                 "an abstention must state what is missing; 'I don't know' is not enough"
@@ -57,18 +64,15 @@ class DocumentHit(BaseModel):
 
 
 class Measurement(BaseModel):
-    """A published value, trimmed to what an answer may restate and cite.
+    """One published value, trimmed to what an answer may restate and cite.
 
-    The full envelope stays in the mart and is reachable with ``explain``. This
-    projection keeps the citation key, the parameters that change the meaning
-    (mechanism, return period, threshold, period) and the licences, and drops
-    the fields a reader never needs per row.
+    Provenance that is identical for every row -- method, datasets, licences,
+    resolution and caveats -- is hoisted to the response, because repeating it
+    per row was 37% of the prompt and identical every time.
     """
 
     row_key: str
     indicator_id: str
-    method_id: str
-    method_version: str
     value: float
     unit: str
     scope_level: str
@@ -81,19 +85,13 @@ class Measurement(BaseModel):
     return_period_years: int | None = None
     depth_threshold_m: float | None = None
     basis: str
-    dataset_versions: list[str] = Field(default_factory=list)
-    licences: list[str] = Field(default_factory=list)
-    native_resolution: str
     coverage_pct: float
-    warnings: list[str] = Field(default_factory=list)
 
     @classmethod
     def from_envelope(cls, row_key: str, envelope: EvidenceEnvelope) -> Measurement:
         return cls(
             row_key=row_key,
             indicator_id=envelope.indicator_id,
-            method_id=envelope.method_id,
-            method_version=envelope.method_version,
             value=envelope.value,
             unit=envelope.unit,
             scope_level=envelope.scope.level,
@@ -106,17 +104,30 @@ class Measurement(BaseModel):
             return_period_years=envelope.return_period_years,
             depth_threshold_m=envelope.depth_threshold_m,
             basis=envelope.period.basis,
-            dataset_versions=[dataset.version for dataset in envelope.datasets],
-            licences=[dataset.licence for dataset in envelope.datasets],
-            native_resolution=envelope.quality.native_resolution,
             coverage_pct=envelope.quality.coverage_pct,
-            warnings=list(envelope.quality.warnings),
         )
+
+
+class Source(BaseModel):
+    """A dataset behind the values, stated once."""
+
+    id: str
+    version: str
+    licence: str
+
+
+class MethodRef(BaseModel):
+    id: str
+    version: str
 
 
 class MeasurementResult(BaseModel):
     status: Literal["ok", "insufficient"] = "ok"
     measurements: list[Measurement] = Field(default_factory=list)
+    caveats: list[str] = Field(default_factory=list)
+    sources: list[Source] = Field(default_factory=list)
+    method: MethodRef | None = None
+    native_resolution: str | None = None
     message: str | None = None
     missing: list[str] = Field(default_factory=list)
     available: Available | None = None
@@ -135,6 +146,7 @@ class DocumentResult(BaseModel):
 class AssistantResult(BaseModel):
     question: str
     answer: Answer
+    citations: list[Citation] = Field(default_factory=list)
     refused_by_guard: bool = False
     # Which model actually served the run. With a fallback chain this is not
     # knowable from configuration, and a latency figure is meaningless without

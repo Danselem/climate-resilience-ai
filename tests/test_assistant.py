@@ -17,8 +17,8 @@ from test_mart import build, frame
 
 from climate_resilience.assistant import (
     Answer,
-    Citation,
     DocumentResult,
+    Measurement,
     ToolDeps,
     ask,
     build_agent,
@@ -26,7 +26,7 @@ from climate_resilience.assistant import (
     model_candidates,
     preflight,
 )
-from climate_resilience.assistant.agent import FLOOD_CAVEAT, MAX_ENVELOPES
+from climate_resilience.assistant.agent import FLOOD_CAVEAT, MAX_ROWS
 from climate_resilience.config import Settings
 from climate_resilience.envelope import (
     DatasetRef,
@@ -65,18 +65,10 @@ def requests_so_far(messages: list[Any]) -> int:
     return sum(1 for message in messages if isinstance(message, ModelRequest))
 
 
-def answer_part(text: str, references: list[str]) -> ToolCallPart:
+def answer_part(text: str, references: list[str] | None = None) -> ToolCallPart:
     return ToolCallPart(
         "final_result",
-        {
-            "text": text,
-            "citations": [
-                {"kind": "measurement", "reference": reference}
-                for reference in references
-            ],
-            "abstained": False,
-            "missing": [],
-        },
+        {"text": text, "abstained": False, "missing": []},
     )
 
 
@@ -133,9 +125,30 @@ def test_an_empty_question_is_refused() -> None:
 # --- answer contract -------------------------------------------------------
 
 
-def test_an_uncited_answer_cannot_be_constructed() -> None:
-    with pytest.raises(ValueError, match="cite"):
-        Answer(text="About 8.9% of the municipality floods.", citations=[])
+def test_citations_are_derived_not_transcribed() -> None:
+    from climate_resilience.assistant.agent import _citations
+
+    deps_ = deps()
+    deps_.seen.append(
+        Measurement(
+            row_key="row-1",
+            indicator_id=HEAT,
+            value=1.0,
+            unit="days",
+            scope_level="ward",
+            scope_id="ethekwini-001",
+            scope_name="Ward 1",
+            period_start="2020-01-01",
+            period_end="2020-12-31",
+            hazard_type="heat",
+            basis="reanalysis",
+            coverage_pct=100.0,
+        )
+    )
+
+    citations = _citations(deps_)
+
+    assert [(c.kind, c.reference) for c in citations] == [("measurement", "row-1")]
 
 
 def test_an_abstention_must_name_what_is_missing() -> None:
@@ -143,13 +156,10 @@ def test_an_abstention_must_name_what_is_missing() -> None:
         Answer(text="I cannot answer that.", abstained=True, missing=[])
 
 
-def test_a_sourced_answer_is_valid() -> None:
-    answer = Answer(
-        text="8.89% of the municipal area is exposed.",
-        citations=[Citation(kind="measurement", reference="abc123")],
-    )
+def test_an_answer_carries_no_citation_field() -> None:
+    answer = Answer(text="8.89% of the municipal area is exposed.")
 
-    assert answer.citations[0].reference == "abc123"
+    assert "citations" not in answer.model_dump()
 
 
 # --- configuration ---------------------------------------------------------
@@ -174,8 +184,8 @@ def test_an_unconfigured_system_uses_the_default_pair(monkeypatch) -> None:
     monkeypatch.delenv("LLM_MODEL_INTENT", raising=False)
 
     assert model_candidates() == [
+        "openrouter:amazon/nova-micro-v1",
         "openrouter:particle-ai/particle-1:free",
-        "openrouter:z-ai/glm-5.3-flash",
     ]
 
 
@@ -267,7 +277,9 @@ def test_the_agent_calls_a_tool_then_answers(monkeypatch) -> None:
     )
 
     assert not result.answer.abstained
-    assert result.answer.citations[0].reference == row_key
+    assert result.citations, "citations come from the evidence the run used"
+    assert result.citations[0].kind == "measurement"
+    assert result.citations[0].reference in {str(row["row_key"]) for row in rows}
     assert result.requests == 2
 
 
@@ -370,7 +382,7 @@ def test_a_flood_answer_gains_the_caveat_when_the_model_omits_it(monkeypatch) ->
     assert FLOOD_CAVEAT in result.answer.text
 
 
-def test_more_than_ten_rows_are_truncated_with_a_note() -> None:
+def test_more_than_five_rows_are_truncated_with_a_note() -> None:
     from climate_resilience.assistant.agent import _measurements
     from climate_resilience.tools.models import ToolOutput
 
@@ -388,9 +400,12 @@ def test_more_than_ten_rows_are_truncated_with_a_note() -> None:
 
     result = _measurements(output, deps(engine))
 
-    assert len(result.measurements) == MAX_ENVELOPES
+    assert len(result.measurements) == MAX_ROWS
     assert result.message is not None
     assert "narrow the request" in result.message
+    assert result.caveats, "caveats are hoisted, not dropped"
+    assert result.sources, "sources are hoisted, not dropped"
+    assert result.method is not None
 
 
 def test_the_agent_exposes_six_tools_and_structured_output() -> None:
@@ -413,4 +428,3 @@ def test_the_agent_exposes_six_tools_and_structured_output() -> None:
         "search_documents",
     }
     assert isinstance(result.output, Answer)
-    assert result.output.citations[0].reference == "reference"

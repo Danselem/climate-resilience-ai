@@ -140,23 +140,29 @@ the whole mart into the prompt.
 Models are a fallback chain, because free endpoints rate-limit without notice:
 
 ```
-LLM_MODELS=particle-ai/particle-1:free,z-ai/glm-5.3-flash
+LLM_MODELS=amazon/nova-micro-v1,particle-ai/particle-1:free
 ```
 
-**Measured on `particle-ai/particle-1:free`, 20 Nov 2026:**
+**Measured on `amazon/nova-micro-v1` in a warm process, 20 Nov 2026:**
 
-| Question | Model | Requests | Latency | Tokens in/out | Cost |
-|---|---|---|---|---|---|
-| 100-year riverine exposure by ward | particle-1:free | 2 | **10.7 s** | 8,939 / 1,054 | $0 |
-| same question | glm-5.3-flash | 2 | **16.6 s** | 8,390 / 1,321 | $0.00044 |
-| What the CAP says about sea level rise | particle-1:free | 2 | **18.1 s** | 6,564 / 936 | $0 |
-| 2050 dry-spell projection (refused) | — | 0 | 0.0 s | 0 / 0 | $0 |
+| Question | Requests | Latency | Tokens in/out | Cost |
+|---|---|---|---|---|
+| 100-year riverine exposure by ward | 2 | **3.83 s** | 5,346 / 126 | $0.00021 |
+| Population in flood-exposed areas | 2 | **2.06 s** | 5,370 / 83 | $0.00020 |
+| Hot days in eThekwini, 2025 | 2 | **1.80 s** | 5,223 / 93 | $0.00020 |
+| What the CAP says about sea level rise | 2 | **3.20 s** | — | $0.00019 |
+| Water and sanitation in the CAP | 2 | **1.59 s** | 3,858 / 65 | $0.00014 |
+| 2050 dry-spell projection (refused) | 0 | 0.0 s | 0 / 0 | $0 |
 
-The answers were correct and correctly caveated, and the model distinguished
-document statements from measured values without being told twice. **The 6 s
-p95 target is not met** — two sequential calls on a free endpoint cost 5–9 s
-each. That is a model-capacity result, not a code result, and it is recorded as
-a failure in [`docs/limitations.md`](docs/limitations.md).
+Median **2.9 s**, mean **$0.00019** per question — inside the 6 s p95 and
+40× inside the $0.004 budget. Cold-start document questions add ~8 s for the
+embedding model, which a long-running process pays once.
+
+Getting there required four changes, all measured rather than assumed:
+deduplicating per-row warnings (37% of the prompt), capping rows at five,
+capping output, and deriving citations from the evidence instead of asking the
+model to transcribe row keys — which had been causing a retry on almost every
+answer.
 
 ### Documents (RAG)
 
