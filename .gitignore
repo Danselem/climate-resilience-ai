@@ -221,3 +221,16 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Project data: raw and derived artefacts are never committed.
+# The machine-readable catalogue and small test fixtures are exceptions.
+data/raw/
+data/processed/
+data/manifests/
+data/mart.db
+data/mart.db-journal
+!data/catalogue/
+!data/reference/
+
+# Vendored agent skills are restored from skills-lock.json, not committed.
+.agents/

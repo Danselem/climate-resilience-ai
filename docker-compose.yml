@@ -1,0 +1,38 @@
+# Local development stack.
+# Phase 1 uses the `cli` service only: batch pipeline work stays batch work.
+# `api` and `worker` services are added in Phases 8 and 10, from the same image.
+
+services:
+  db:
+    image: postgis/postgis:16-3.4
+    environment:
+      POSTGRES_USER: crp
+      POSTGRES_PASSWORD: crp
+      POSTGRES_DB: crp
+    ports:
+      - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U crp -d crp"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  cli:
+    build: .
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      CRP_DATABASE_URL: postgresql+psycopg://crp:crp@db:5432/crp
+      CRP_DATA_DIR: /app/data
+    volumes:
+      - ./data:/app/data
+      - ./src:/app/src
+    # No default long-running command: run stages explicitly, e.g.
+    #   docker compose run --rm cli mart
+    command: ["--help"]
+
+volumes:
+  pgdata:

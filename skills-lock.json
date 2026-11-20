@@ -1,0 +1,33 @@
+{
+  "version": 2,
+  "skills": {
+    "building-pydantic-ai-agents": {
+      "source": "pydantic/skills",
+      "commit": "98f591c0886eb11df0bdd57804419e11439efc93",
+      "sourceType": "github",
+      "skillPath": "skills/building-pydantic-ai-agents/SKILL.md",
+      "computedHash": "433337a7d3227af428621c007a01bceca0caf621ab1a770adc39754ad6cba06e"
+    },
+    "fastapi": {
+      "source": "fastapi/fastapi",
+      "commit": "05e6df7e906c3decba377c37548019973f40bf15",
+      "sourceType": "github",
+      "skillPath": "fastapi/.agents/skills/fastapi/SKILL.md",
+      "computedHash": "141f0146e357365d518029ccc74e5b0a256f9a352573c65856780995d1bea52c"
+    },
+    "postgresql-optimization": {
+      "source": "github/awesome-copilot",
+      "commit": "1683f50e94c9fd489191f73d7c8f7e2bd871bd0c",
+      "sourceType": "github",
+      "skillPath": "skills/postgresql-optimization/SKILL.md",
+      "computedHash": "b28b67b9111cffa917cf4bffce56a1f37003ae08a1de79c302f297d38de2555d"
+    },
+    "system-design": {
+      "source": "wondelai/skills",
+      "commit": "c5265583b1a9740f06831e1d3e89b35bba3eb430",
+      "sourceType": "github",
+      "skillPath": "system-design/SKILL.md",
+      "computedHash": "4f29961f17cc7f5520383d27d66ad32ff5ce86d7f74b92b2a41536d7338b6290"
+    }
+  }
+}

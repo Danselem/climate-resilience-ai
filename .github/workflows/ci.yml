@@ -1,0 +1,32 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync --all-groups --frozen
+
+      - name: Lint
+        run: uv run ruff check .
+
+      - name: Test
+        run: uv run pytest --cov=climate_resilience --cov-report=term-missing
+
+      # The pipeline itself needs network data, so it is exercised manually
+      # (make boundaries && make climate && make mart && make verify) and the
+      # resulting manifests are committed for review. CI asserts the code, not
+      # a live download.
+      - name: Catalogue is coherent
+        run: uv run climate-resilience catalogue

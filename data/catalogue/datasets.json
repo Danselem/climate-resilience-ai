@@ -1,0 +1,274 @@
+{
+  "version": 1,
+  "datasets": [
+    {
+      "id": "geoboundaries_zaf_adm2",
+      "name": "geoBoundaries South Africa ADM2 (district municipalities)",
+      "role": "Municipal boundary for spatially explicit aggregation",
+      "source_url": "https://www.geoboundaries.org/api/current/gbOpen/ZAF/ADM2/",
+      "licence": "CC BY 3.0 IGO",
+      "version": "adm2-2020",
+      "checksum": "6cc504ad835b37823da687a3fd3f0cab63608a6c8a5ad906e1011f1554bbbbdd",
+      "basis": "observation",
+      "units": "n/a (administrative polygons)",
+      "crs": "EPSG:4326",
+      "native_resolution": "vector",
+      "spatial_coverage": "South Africa, ADM2; one feature extracted for eThekwini",
+      "temporal_coverage": "2020 boundary vintage",
+      "time_basis": "n/a",
+      "status": "active",
+      "retrieved_at": "2026-11-19",
+      "known_gaps": [
+        "Ward (ADM4) polygons are not published at this level; ward-level results are blocked",
+        "Boundary vintage 2020 may not match the Census 2022 ward geography",
+        "Source is a redistribution of MDB data, not the MDB release itself"
+      ],
+      "processing_steps": [
+        "Downloaded the ADM2 GeoJSON for ZAF from the geoBoundaries API",
+        "Extracted the single feature whose name contains 'eThekwini'",
+        "Validated geometry validity and computed area in EPSG:32736 (2,556.6 km2)",
+        "Wrote a normalised FeatureCollection with source, licence and vintage recorded"
+      ]
+    },
+    {
+      "id": "geoboundaries_zaf_adm4",
+      "name": "geoBoundaries South Africa ADM4 (wards)",
+      "role": "Ward geometry for spatially explicit candidate-level results",
+      "source_url": "https://www.geoboundaries.org/api/current/gbOpen/ZAF/ADM4/",
+      "licence": "CC BY 3.0 IGO",
+      "version": "adm4-2020",
+      "checksum": "b4c5d301b2398c9407d9b318e2c96aa7b35847161fd021c757fcbc3b29471fda",
+      "basis": "observation",
+      "units": "n/a (administrative polygons)",
+      "crs": "EPSG:4326",
+      "native_resolution": "vector",
+      "spatial_coverage": "South Africa, ADM4; 110 eThekwini wards extracted",
+      "temporal_coverage": "2020 delimitation vintage",
+      "time_basis": "n/a",
+      "status": "active",
+      "retrieved_at": "2026-11-20",
+      "known_gaps": [
+        "Redistribution of MDB data, not the MDB release itself",
+        "Official ward codes are not carried; ward numbers are parsed from the feature name (eThekwini 001)",
+        "Vintage 2020 may not match Census 2022 ward geography; a crosswalk to census geography is still required",
+        "Ward layer tiles the municipality exactly (area difference 0.0 km2) but has not been reconciled against an independent ward list"
+      ],
+      "processing_steps": [
+        "Downloaded the ADM4 GeoJSON for ZAF from the geoBoundaries API",
+        "Selected the 110 features whose name begins with 'eThekwini'",
+        "Parsed ward numbers from the feature name and recorded the provenance of that code",
+        "Validated geometry validity, containment and area reconciliation against the ADM2 municipality",
+        "Persisted ward geometry and a ward-to-municipality crosswalk in the boundary tables"
+      ]
+    },
+    {
+      "id": "era5_openmeteo",
+      "name": "Daily maximum temperature, Open-Meteo archive (ERA5-derived)",
+      "role": "Historical heat baseline",
+      "source_url": "https://archive-api.open-meteo.com/v1/archive",
+      "licence": "CC BY 4.0 (Open-Meteo); underlying reanalysis: Copernicus ERA5",
+      "version": "archive-1980-01-01_2024-12-31",
+      "checksum": "9fe1ae5276516c722fec6e6a3a32dd6ffe58e2e8e15efce7afd135a24c646e35",
+      "basis": "reanalysis",
+      "units": "degC",
+      "crs": "EPSG:4326 (point locations reported by the source)",
+      "native_resolution": "0.25 deg (~28 km), 5 grid points returned for eThekwini",
+      "spatial_coverage": "eThekwini bounding box grid points",
+      "temporal_coverage": "1980-01-01 to 2024-12-31, daily",
+      "time_basis": "local_day Africa/Johannesburg (UTC+2)",
+      "status": "active",
+      "retrieved_at": "2026-11-19",
+      "known_gaps": [
+        "Secondary distribution of ERA5, not the Copernicus CDS product itself; CDS adapter not implemented",
+        "0.25 deg resolution cannot resolve ward-level differences; results are reported per grid cell",
+        "Returned grid coordinates are snapped by the provider and are not exact 0.25 deg multiples",
+        "No missing days reported for this period; gap-filling behaviour of the provider is undocumented"
+      ],
+      "processing_steps": [
+        "Selected grid cells intersecting the eThekwini boundary",
+        "Requested daily temperature_2m_max for each cell, 1980-2024, local-day timezone",
+        "Recorded the provider's reported latitude/longitude as the data location",
+        "Stored raw JSON payloads immutably, then wrote a canonical Parquet table",
+        "Enforced unique (cell_id, date) and numeric coercion of missing values"
+      ]
+    },
+    {
+      "id": "mdb_wards",
+      "name": "Municipal Demarcation Board ward boundaries",
+      "role": "Authoritative ward geography for candidate-level results",
+      "source_url": "https://www.demarcation.org.za",
+      "licence": "unknown \u2014 to be confirmed from the MDB release",
+      "version": "unresolved",
+      "basis": "observation",
+      "units": "n/a (administrative polygons)",
+      "crs": "EPSG:4326 (expected)",
+      "native_resolution": "vector",
+      "spatial_coverage": "national; ward subset for eThekwini required",
+      "temporal_coverage": "depends on release vintage",
+      "time_basis": "n/a",
+      "status": "blocked",
+      "retrieved_at": null,
+      "known_gaps": [
+        "demarcation.org.za timed out from the build environment; no file was retrieved",
+        "Wards are currently sourced from the geoBoundaries ADM4 redistribution (see geoboundaries_zaf_adm4)",
+        "Release vintage must be matched to Census 2022 ward geography before any census join",
+        "Replace the substitute layer when the MDB release is reachable"
+      ],
+      "processing_steps": []
+    },
+    {
+      "id": "cds_era5",
+      "name": "Copernicus CDS ERA5 single levels",
+      "role": "Canonical historical reanalysis source",
+      "source_url": "https://cds.climate.copernicus.eu/how-to-api",
+      "licence": "Copernicus licence \u2014 acceptance required",
+      "version": "reanalysis-era5-single-levels",
+      "basis": "reanalysis",
+      "units": "K (temperature), m (precipitation)",
+      "crs": "EPSG:4326",
+      "native_resolution": "0.25 deg (~28 km)",
+      "spatial_coverage": "global; subset to metro bounding box",
+      "temporal_coverage": "1940 to near-present, hourly",
+      "time_basis": "UTC",
+      "status": "not_implemented",
+      "retrieved_at": null,
+      "known_gaps": [
+        "No CDS account or licence acceptance in this environment",
+        "Adapter contract declared in src/climate_resilience/ingestion/cds_era5.py; not exercised"
+      ],
+      "processing_steps": []
+    },
+    {
+      "id": "census_2022",
+      "name": "Statistics South Africa Census 2022",
+      "role": "Vulnerability and socioeconomic axis",
+      "source_url": "https://www.statssa.gov.za/",
+      "licence": "to be confirmed",
+      "version": "2022",
+      "basis": "observation",
+      "units": "persons, households",
+      "crs": "n/a (tabular)",
+      "native_resolution": "ward or main-place, to be confirmed",
+      "spatial_coverage": "South Africa",
+      "temporal_coverage": "2022",
+      "time_basis": "census night",
+      "status": "planned",
+      "retrieved_at": null,
+      "known_gaps": [
+        "Ward-level machine-readable availability unverified",
+        "Small-cell suppression rules must be applied before publishing ward statistics"
+      ],
+      "processing_steps": []
+    },
+    {
+      "id": "worldpop",
+      "name": "WorldPop gridded population",
+      "role": "Dasymetric exposure denominator",
+      "source_url": "https://www.worldpop.org/",
+      "licence": "CC BY 4.0",
+      "version": "unresolved",
+      "basis": "modelled_estimate",
+      "units": "persons per 100 m cell",
+      "crs": "EPSG:4326",
+      "native_resolution": "100 m",
+      "spatial_coverage": "South Africa",
+      "temporal_coverage": "annual",
+      "time_basis": "annual estimate",
+      "status": "planned",
+      "retrieved_at": null,
+      "known_gaps": [
+        "Release must be pinned to the census vintage used by Census 2022",
+        "Constrained vs unconstrained product choice not yet made"
+      ],
+      "processing_steps": []
+    },
+    {
+      "id": "aqueduct_floods",
+      "name": "WRI Aqueduct Floods v2 (riverine and coastal)",
+      "role": "Flood hazard layer",
+      "source_url": "https://www.wri.org/aqueduct",
+      "licence": "CC BY 4.0",
+      "version": "v2",
+      "basis": "modelled_estimate",
+      "units": "flood depth (m)",
+      "crs": "EPSG:4326",
+      "native_resolution": "~1 km",
+      "spatial_coverage": "global",
+      "temporal_coverage": "baseline and future scenarios",
+      "time_basis": "return period",
+      "status": "planned",
+      "retrieved_at": null,
+      "known_gaps": [
+        "Pluvial (surface-water) flooding is not represented; this is a stated limitation, not a gap to fill",
+        "Return periods and scenario parameter set must be confirmed against the actual release",
+        "Resolution supports ward-scale statistics only, never property-level claims"
+      ],
+      "processing_steps": []
+    },
+    {
+      "id": "nccis_projections",
+      "name": "NCCIS climate projections (CSIR/SAWS)",
+      "role": "Future scenario indicators",
+      "source_url": "https://nccis.environment.gov.za/climate-services/download-data",
+      "licence": "to be confirmed",
+      "version": "unresolved",
+      "basis": "projection",
+      "units": "degC / mm depending on variable",
+      "crs": "EPSG:4326 (expected)",
+      "native_resolution": "to be confirmed",
+      "spatial_coverage": "South Africa",
+      "temporal_coverage": "2021-2050 vs 1971-2000 baseline, RCP4.5 and RCP8.5",
+      "time_basis": "to be confirmed",
+      "status": "planned",
+      "retrieved_at": null,
+      "known_gaps": [
+        "Download mechanics and file format unverified",
+        "Scenario and model labelling must be recorded per row"
+      ],
+      "processing_steps": []
+    },
+    {
+      "id": "firms",
+      "name": "NASA FIRMS active fire detections",
+      "role": "Wildfire observation",
+      "source_url": "https://firms.modaps.eosdis.nasa.gov/download/",
+      "licence": "NASA open data \u2014 terms to confirm",
+      "version": "unresolved",
+      "basis": "observation",
+      "units": "detections",
+      "crs": "EPSG:4326",
+      "native_resolution": "1 km (MODIS), 375 m (VIIRS)",
+      "spatial_coverage": "global",
+      "temporal_coverage": "2000 to present",
+      "time_basis": "acquisition timestamp (UTC)",
+      "status": "planned",
+      "retrieved_at": null,
+      "known_gaps": [
+        "Confidence filtering rule not yet fixed"
+      ],
+      "processing_steps": []
+    },
+    {
+      "id": "greenbook",
+      "name": "GreenBook municipal climate-risk profiles",
+      "role": "Context and cross-checking only",
+      "source_url": "https://www.greenbook.co.za/greenbook-support.html",
+      "licence": "to be confirmed",
+      "version": "unresolved",
+      "basis": "derived",
+      "units": "mixed",
+      "crs": "mixed",
+      "native_resolution": "mixed",
+      "spatial_coverage": "South African municipalities",
+      "temporal_coverage": "varies",
+      "time_basis": "varies",
+      "status": "context_only",
+      "retrieved_at": null,
+      "known_gaps": [
+        "Packages are documents and dashboards rather than a tidy API",
+        "No analytic depends on parsing GreenBook"
+      ],
+      "processing_steps": []
+    }
+  ]
+}
