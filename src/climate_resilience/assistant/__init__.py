@@ -6,7 +6,14 @@ chunk, and every answer either cites what it used or states what is missing.
 
 from __future__ import annotations
 
-from .agent import ToolDeps, ask, build_agent, default_model, document_search
+from .agent import (
+    ToolDeps,
+    ask,
+    build_agent,
+    default_model,
+    document_search,
+    model_candidates,
+)
 from .guard import Refusal, preflight
 from .models import (
     Answer,
@@ -32,5 +39,6 @@ __all__ = [
     "build_agent",
     "default_model",
     "document_search",
+    "model_candidates",
     "preflight",
 ]

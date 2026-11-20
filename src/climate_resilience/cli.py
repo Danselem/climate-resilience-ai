@@ -142,8 +142,10 @@ def ask(
         typer.echo("\nmissing:")
         for item in result.answer.missing:
             typer.echo(f"  - {item}")
+    cost = f"${result.cost_usd:.6f}" if result.cost_usd is not None else "unpriced"
     typer.echo(
-        f"\nrequests={result.requests} "
+        f"\nmodel={result.model or '-'} seconds={result.seconds} cost={cost} "
+        f"requests={result.requests} "
         f"tokens={result.input_tokens}/{result.output_tokens} "
         f"guard={result.refused_by_guard}"
     )

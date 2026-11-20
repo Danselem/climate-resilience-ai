@@ -6,7 +6,13 @@ from datetime import date
 from functools import lru_cache
 from pathlib import Path
 
+from dotenv import load_dotenv
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# Settings reads `.env` itself, but the LLM variables are read from
+# `os.environ` by the assistant and by Pydantic AI's provider. Loading the file
+# into the environment once keeps both paths seeing the same values.
+load_dotenv()
 
 
 class Settings(BaseSettings):

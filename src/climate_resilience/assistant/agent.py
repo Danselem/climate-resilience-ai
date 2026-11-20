@@ -15,6 +15,7 @@ prompt requires it, but a prompt is not a guarantee.
 from __future__ import annotations
 
 import os
+import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
 
@@ -28,6 +29,7 @@ from ..config import Settings
 from ..store import repository
 from ..tools import mart_tools
 from ..tools.models import ToolOutput
+from . import pricing
 from .guard import preflight
 from .models import (
     Answer,
@@ -43,6 +45,11 @@ MAX_ENVELOPES = 10
 MAX_DOCUMENTS = 6
 MAX_REQUESTS = 2
 MAX_TOOL_CALLS = 3
+
+# A free endpoint first, because it is free and it works; a cheap paid model
+# second, because free endpoints disappear without notice. Both are OpenRouter
+# ids and both are priced at run time.
+DEFAULT_MODELS = ("particle-ai/particle-1:free", "openai/gpt-oss-20b")
 
 FLOOD_CAVEAT = (
     "Caveat: riverine and coastal flooding only. Pluvial (surface-water) "
@@ -60,14 +67,45 @@ class ToolDeps:
 
 
 def default_model() -> str:
-    """Model id from the environment, with the provider prefix applied once."""
-    model = os.environ.get("LLM_MODEL_SYNTHESIS") or os.environ.get("LLM_MODEL_INTENT")
-    if not model:
-        raise RuntimeError(
-            "No model configured. Set LLM_MODEL_SYNTHESIS (and OPENROUTER_API_KEY) "
-            "in .env or the environment."
-        )
-    return model if ":" in model else f"openrouter:{model}"
+    """First configured model. Kept for callers that want one string."""
+    return model_candidates()[0]
+
+
+def model_candidates() -> list[str]:
+    """Models to try in order, each with an explicit provider prefix.
+
+    ``LLM_MODELS`` is a comma-separated list. A single ``LLM_MODEL_SYNTHESIS``
+    and the built-in pair are the fallbacks. Free endpoints disappear without
+    notice, so the list is the unit of configuration, not one model id.
+    """
+    raw = os.environ.get("LLM_MODELS")
+    if raw:
+        names = [part.strip() for part in raw.split(",") if part.strip()]
+    else:
+        single = os.environ.get("LLM_MODEL_SYNTHESIS") or os.environ.get("LLM_MODEL_INTENT")
+        names = [single] if single else list(DEFAULT_MODELS)
+    return [_qualify(name) for name in names]
+
+
+def _qualify(name: str) -> str:
+    """Add ``openrouter:`` unless a provider prefix is already present.
+
+    ``particle-ai/particle-1:free`` contains a colon that is part of the model
+    id, not a provider prefix, so the test is whether the text before the first
+    colon looks like a provider (no slash).
+    """
+    head, separator, _ = name.partition(":")
+    if separator and "/" not in head:
+        return name
+    return f"openrouter:{name}"
+
+
+def _model_chain(candidates: list[str]) -> str | Model:
+    if len(candidates) == 1:
+        return candidates[0]
+    from pydantic_ai.models.fallback import FallbackModel
+
+    return FallbackModel(candidates[0], *candidates[1:])
 
 
 def document_search(settings: Settings) -> Callable[[str, str | None, int], DocumentResult]:
@@ -111,9 +149,17 @@ def document_search(settings: Settings) -> Callable[[str, str | None, int], Docu
     return search
 
 
-def build_agent(model: str | None = None) -> Agent[ToolDeps, Answer]:
+def build_agent(
+    model: str | Model | list[str] | None = None,
+) -> Agent[ToolDeps, Answer]:
+    if model is None:
+        resolved: str | Model = _model_chain(model_candidates())
+    elif isinstance(model, list):
+        resolved = _model_chain(model)
+    else:
+        resolved = model
     agent: Agent[ToolDeps, Answer] = Agent(
-        model or default_model(),
+        resolved,
         name="climate_resilience_agent",
         deps_type=ToolDeps,
         output_type=Answer,
@@ -279,6 +325,7 @@ def ask(
         search=document_search(settings),
     )
 
+    started = time.perf_counter()
     try:
         result = build_agent(model).run_sync(
             question,
@@ -298,17 +345,25 @@ def ask(
                 abstained=True,
                 missing=["a completed tool run within 2 model requests"],
             ),
+            seconds=round(time.perf_counter() - started, 3),
             error=f"{type(exc).__name__}: {exc}",
         )
 
+    seconds = time.perf_counter() - started
     answer = _with_flood_caveat(result.output, deps.seen)
     usage = result.usage
+    input_tokens = int(getattr(usage, "input_tokens", 0) or 0)
+    output_tokens = int(getattr(usage, "output_tokens", 0) or 0)
+    served = getattr(result.response, "model_name", None)
     return AssistantResult(
         question=question,
         answer=answer,
+        model=served,
+        seconds=round(seconds, 3),
+        cost_usd=pricing.estimate_cost(served, input_tokens, output_tokens),
         requests=int(getattr(usage, "requests", 0) or 0),
-        input_tokens=int(getattr(usage, "input_tokens", 0) or 0),
-        output_tokens=int(getattr(usage, "output_tokens", 0) or 0),
+        input_tokens=input_tokens,
+        output_tokens=output_tokens,
     )
 
 

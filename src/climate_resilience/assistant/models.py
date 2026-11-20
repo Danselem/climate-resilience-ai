@@ -136,6 +136,12 @@ class AssistantResult(BaseModel):
     question: str
     answer: Answer
     refused_by_guard: bool = False
+    # Which model actually served the run. With a fallback chain this is not
+    # knowable from configuration, and a latency figure is meaningless without
+    # it.
+    model: str | None = None
+    seconds: float = 0.0
+    cost_usd: float | None = None
     requests: int = 0
     input_tokens: int = 0
     output_tokens: int = 0

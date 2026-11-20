@@ -85,9 +85,19 @@ output's `quality.warnings`.
 
 ## Assistant
 
-- **Not measured.** Latency, cost per question and tool-selection accuracy need
-  `OPENROUTER_API_KEY`; without it the test suite exercises orchestration with a
-  scripted model, which proves the plumbing and not the model's judgement.
+- **Latency misses the target.** Measured on `particle-ai/particle-1:free`:
+  10.7 s for an analytical question, 18.1 s for a document question, against a
+  6 s p95 target. Two sequential model calls on a free endpoint dominate; the
+  tool work is milliseconds. Faster models are the lever, not code.
+- **Cost is measured as zero, which is technically true and practically
+  useless.** The free model prices at $0. The $0.004/question target is
+  therefore untested against a paid model, where the same token counts would
+  cost roughly $0.0003.
+- **Token count is inflated by per-row detail.** 8,939 input tokens for a
+  five-row ranking, because every row carries its licence list and warnings.
+  That is the first thing to trim if latency matters more than per-row detail.
+- **Tool-selection accuracy is not measured.** Two questions were checked by
+  hand; the gold set does not exist yet.
 - **The guard is keyword-based.** It refuses pluvial and unmeasured-dataset
   questions before any model call. A phrasing it misses still reaches tools that
   cannot answer it, so the failure mode is a slower refusal rather than a wrong
@@ -100,6 +110,11 @@ output's `quality.warnings`.
   That is the intended trade, and it is visible in the `error` field.
 - **The caveat post-check is textual.** It guarantees the words "pluvial" appear
   in a flood answer; it cannot guarantee the rest of the sentence is right.
+- **Free-model availability is volatile.** `gemma-4-26b:free` and
+  `ling-3.2-flash:free` both returned 429 within minutes of working; one
+  catalogue id (`nemotron-3-lightning:free`) returned "not a valid model ID".
+  The fallback chain exists because of this, and the served model is recorded
+  per run.
 
 ## Documents (RAG)
 

@@ -23,6 +23,7 @@ from climate_resilience.assistant import (
     ask,
     build_agent,
     default_model,
+    model_candidates,
     preflight,
 )
 from climate_resilience.assistant.agent import FLOOD_CAVEAT, MAX_ENVELOPES
@@ -167,12 +168,60 @@ def test_an_explicit_provider_is_not_rewritten(monkeypatch) -> None:
     assert default_model() == "openrouter:meta/llama-3"
 
 
-def test_a_missing_model_is_an_explicit_error(monkeypatch) -> None:
+def test_an_unconfigured_system_uses_the_default_pair(monkeypatch) -> None:
+    monkeypatch.delenv("LLM_MODELS", raising=False)
     monkeypatch.delenv("LLM_MODEL_SYNTHESIS", raising=False)
     monkeypatch.delenv("LLM_MODEL_INTENT", raising=False)
 
-    with pytest.raises(RuntimeError, match="LLM_MODEL_SYNTHESIS"):
-        default_model()
+    assert model_candidates() == [
+        "openrouter:particle-ai/particle-1:free",
+        "openrouter:openai/gpt-oss-20b",
+    ]
+
+
+def test_a_free_suffix_is_not_mistaken_for_a_provider_prefix(monkeypatch) -> None:
+    monkeypatch.setenv(
+        "LLM_MODELS",
+        "particle-ai/particle-1:free, openrouter:google/gemma-4-31b-it:free",
+    )
+
+    assert model_candidates() == [
+        "openrouter:particle-ai/particle-1:free",
+        "openrouter:google/gemma-4-31b-it:free",
+    ]
+
+
+def test_two_candidates_become_a_fallback_chain(monkeypatch) -> None:
+    from pydantic_ai.models.fallback import FallbackModel
+
+    from climate_resilience.assistant.agent import _model_chain
+
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
+    chain = _model_chain(["openrouter:a/b", "openrouter:c/d"])
+
+    assert isinstance(chain, FallbackModel)
+
+
+def test_one_candidate_is_passed_through_unwrapped() -> None:
+    from climate_resilience.assistant.agent import _model_chain
+
+    assert _model_chain(["openrouter:a/b"]) == "openrouter:a/b"
+
+
+def test_cost_comes_from_published_prices(monkeypatch) -> None:
+    from climate_resilience.assistant import pricing
+
+    monkeypatch.setattr(pricing, "_prices", lambda: {"x/y": (1e-6, 2e-6)})
+
+    assert pricing.estimate_cost("openrouter:x/y", 1000, 500) == pytest.approx(0.002)
+
+
+def test_an_unpriced_model_reports_no_cost_rather_than_zero(monkeypatch) -> None:
+    from climate_resilience.assistant import pricing
+
+    monkeypatch.setattr(pricing, "_prices", lambda: {})
+
+    assert pricing.estimate_cost("unknown/model", 100, 100) is None
 
 
 def test_a_missing_api_key_abstains_without_calling_a_model(monkeypatch) -> None:
