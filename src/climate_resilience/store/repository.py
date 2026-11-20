@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from sqlalchemy import Engine, create_engine, delete, func, select
+from sqlalchemy import Engine, create_engine, delete, func, inspect, select, text
 from sqlalchemy.engine import make_url
 
 from .models import boundary, boundary_crosswalk, indicator_value, metadata
@@ -19,7 +19,34 @@ def make_engine(database_url: str) -> Engine:
 
 
 def ensure_schema(engine: Engine) -> None:
+    """Create the schema, then add columns introduced after a database existed.
+
+    The mart is derived and rebuildable, but it is not dropped silently: a
+    column added by a later version is ALTERed in, so an existing database
+    keeps its rows and the next rebuild populates the new field.
+    """
     metadata.create_all(engine)
+    _add_missing_columns(engine)
+
+
+def _add_missing_columns(engine: Engine) -> None:
+    inspector = inspect(engine)
+    if not inspector.has_table(indicator_value.name):
+        return
+    present = {column["name"] for column in inspector.get_columns(indicator_value.name)}
+    for column in indicator_value.columns:
+        if column.name in present:
+            continue
+        if not column.nullable and column.server_default is None:
+            raise RuntimeError(
+                f"cannot add the NOT NULL column {column.name!r} to an existing "
+                "indicator_value table; rebuild the mart instead"
+            )
+        ddl = column.type.compile(dialect=engine.dialect)
+        with engine.begin() as conn:
+            conn.execute(
+                text(f"ALTER TABLE {indicator_value.name} ADD COLUMN {column.name} {ddl}")
+            )
 
 
 def replace_build(

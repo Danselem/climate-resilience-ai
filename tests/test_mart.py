@@ -201,3 +201,17 @@ def test_period_and_unit_survive_row_flattening() -> None:
     row = build(frame())[0]
     assert row["period_start"] == date(2020, 1, 1)
     assert row["unit"] == "days"
+
+
+def test_envelope_json_round_trips_the_evidence() -> None:
+    from climate_resilience.envelope import EvidenceEnvelope
+
+    row = build(frame())[0]
+    envelope = EvidenceEnvelope.model_validate_json(str(row["envelope_json"]))
+
+    assert envelope.value == row["value"]
+    assert envelope.method_id == SPEC.method_id
+    assert envelope.datasets[0].licence == "CC BY 4.0"
+    assert envelope.run.run_id == "run-1"
+    # The flattening drops the dataset list; the envelope must still carry it.
+    assert envelope.datasets[0].checksum == "abc"

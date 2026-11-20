@@ -246,3 +246,22 @@ def test_empty_boundary_write_is_a_noop(engine) -> None:
     assert repository.replace_boundaries(engine, []) == 0
     assert repository.replace_crosswalk(engine, [], vintage="2020") == 0
     assert repository.fetch_boundaries(engine) == []
+
+
+def test_ensure_schema_adds_a_column_to_an_existing_table(tmp_path) -> None:
+    """A database built before a column existed is migrated, not dropped."""
+    from sqlalchemy import create_engine, inspect, text
+
+    engine = create_engine(f"sqlite:///{tmp_path / 'old.db'}")
+    repository.ensure_schema(engine)
+
+    # Simulate a database created before `envelope_json` was added.
+    with engine.begin() as conn:
+        conn.execute(text("ALTER TABLE indicator_value DROP COLUMN envelope_json"))
+    before = {column["name"] for column in inspect(engine).get_columns("indicator_value")}
+    assert "envelope_json" not in before
+
+    repository.ensure_schema(engine)
+
+    after = {column["name"] for column in inspect(engine).get_columns("indicator_value")}
+    assert "envelope_json" in after

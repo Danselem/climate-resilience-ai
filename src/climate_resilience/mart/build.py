@@ -202,6 +202,10 @@ def to_row(envelope: EvidenceEnvelope) -> dict[str, Any]:
         "dataset_version": ",".join(sorted(d.version for d in envelope.datasets)),
         "run_id": envelope.run.run_id,
         "created_at": envelope.run.created_at,
+        # Kept verbatim so a citation can name the dataset, licence, method and
+        # commit. Without it the mart knows a version string and nothing more,
+        # which is not enough to support a sourced claim.
+        "envelope_json": envelope.model_dump_json(),
     }
 
 

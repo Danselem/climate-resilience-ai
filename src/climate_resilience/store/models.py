@@ -54,6 +54,12 @@ indicator_value = Table(
     Column("dataset_version", Text, nullable=False),
     Column("run_id", Text, nullable=False),
     Column("created_at", DateTime, nullable=False),
+    # The full evidence envelope, verbatim. The flattened columns above are a
+    # projection of it; this keeps what a citation needs and a flat row cannot
+    # carry: dataset ids, source URLs, licences, checksums, the method id and
+    # the run's git commit. Nullable only so an existing database can be
+    # migrated in place; every row written by `to_row` populates it.
+    Column("envelope_json", Text, nullable=True),
 )
 
 Index(

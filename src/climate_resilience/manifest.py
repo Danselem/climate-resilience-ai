@@ -140,12 +140,17 @@ class RunRecorder:
 def content_hash(
     rows: list[dict[str, Any]],
     *,
-    exclude: tuple[str, ...] = ("run_id", "created_at"),
+    exclude: tuple[str, ...] = ("run_id", "created_at", "envelope_json"),
 ) -> str:
     """Hash of published content, ignoring run identity.
 
     Two builds from the same inputs and commit must produce the same hash.
     `run_id` and `created_at` differ by design, so they are excluded.
+    `envelope_json` is excluded because the run identity is embedded inside it
+    as JSON, where a top-level key filter cannot reach it. Nothing analytically
+    material is lost: value, scope, period, parameters, dataset_version,
+    method_version, warnings and resolution are all flattened columns of the
+    same envelope.
     """
     cleaned = [{k: v for k, v in row.items() if k not in exclude} for row in rows]
     cleaned.sort(key=lambda row: json.dumps(row, sort_keys=True, default=str))
