@@ -16,7 +16,9 @@ from . import acquire
 from . import catalogue as catalogue_module
 from .config import get_settings
 from .exposure import build_exposure
+from .flood import build_flood
 from .indicators import REGISTRY
+from .ingestion.aqueduct import fetch_flood
 from .ingestion.census import fetch_census_ward_population
 from .ingestion.worldpop import fetch_worldpop
 from .pipeline import (
@@ -118,6 +120,44 @@ def exposure() -> None:
     typer.echo(f"rows          : {summary.rows}")
     typer.echo(f"content_hash  : {summary.content_hash}")
     typer.echo(f"snapshot      : {summary.snapshot_path}")
+
+
+@app.command()
+def flood() -> None:
+    """Download the Aqueduct baseline layers and clip them to the municipality."""
+    settings = get_settings()
+    municipality = load_or_fetch_municipality(settings)
+    extract = fetch_flood(settings, municipality)
+    typer.echo(f"cell-layers   : {len(extract.frame):,}")
+    for key, layer in extract.summary["layers"].items():  # type: ignore[union-attr]
+        typer.echo(
+            f"  {key:<14} wet={layer['wet_cells']:>4}  max={layer['max_depth_m']:>5.3f} m"
+        )
+    typer.echo(
+        "resolution    : 1 km raster from a 5' (~10 km) hydrological model "
+        "(Aqueduct Floods v2, baseline)"
+    )
+    typer.echo(f"processed     : {extract.processed_path}")
+
+
+@app.command("flood-exposure")
+def flood_exposure(
+    threshold: float | None = typer.Option(
+        None, help="Depth threshold in metres; default is any modelled inundation"
+    ),
+) -> None:
+    """Build ward and municipality flood exposure from the hazard grid."""
+    settings = get_settings()
+    summary = build_flood(settings, threshold_m=0.0 if threshold is None else threshold)
+    typer.echo(f"run_id        : {summary.run_id}")
+    typer.echo(f"rows          : {summary.rows} "
+               f"({summary.area_rows} area, {summary.population_rows} population)")
+    typer.echo(f"content_hash  : {summary.content_hash}")
+    typer.echo(f"withheld      : {len(summary.withheld)} scope-layers (no hazard data)")
+    for item in summary.withheld[:6]:
+        typer.echo(f"  {item}")
+    for path in summary.snapshot_paths:
+        typer.echo(f"snapshot      : {path}")
 
 
 @app.command()

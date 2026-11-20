@@ -6,10 +6,11 @@ An analytical system, not a chatbot: every number is computed deterministically,
 carries its provenance, and can be reproduced from a recorded manifest. A
 language model may later explain those numbers; it may never calculate them.
 
-**Status: Phase 3 exposure complete.** Heat and population exposure end to end
-on real data, plus a validated ward boundary layer. Vulnerability is blocked on
-a bulk Census 2022 source and is deliberately not published. See
-[`docs/limitations.md`](docs/limitations.md) before reading any result.
+**Status: Phase 4 flood hazard complete.** Heat, population exposure and flood
+exposure (riverine and coastal) end to end on real data, plus a validated ward
+boundary layer. Vulnerability is blocked on a bulk Census 2022 source and is
+deliberately not published. See [`docs/limitations.md`](docs/limitations.md)
+before reading any result.
 
 - Specification: [`climate-resilience.md`](climate-resilience.md)
 - Agent and quality rules: [`AGENTS.md`](AGENTS.md)
@@ -52,6 +53,43 @@ Exposure is not risk. These rows answer "where do people live" and carry
 calculation. The 100 m product is not used because the national file is 609 MB
 and the server does not support range requests
 ([ADR-009](docs/adr/009-exposure-resolution-and-vulnerability-gap.md)).
+
+### Flood exposure (Phase 4)
+
+WRI Aqueduct Floods v2 baseline hazard maps — riverine and coastal, 10/50/100
+year return periods — clipped to eThekwini and exposed against ward area and
+WorldPop population.
+
+```bash
+uv run climate-resilience flood
+uv run climate-resilience flood-exposure
+```
+
+```
+cell-layers   : 21,258   (6 layers x 3,543 cells)
+wet cells     : 316 riverine (10-yr), 317 (50/100-yr), 0 coastal
+resolution    : 1 km raster from a 5' (~10 km) hydrological model
+flood rows    : 1,320 (108 wards x 3 return periods x 2 mechanisms x 2 indicators,
+                        + municipality, 6 scope-layers withheld)
+```
+
+| Riverine, 100-yr | Value |
+|---|---|
+| Municipal area exposed | 8.89% (227.3 km²) |
+| Population in exposed cells | 405,832 (10.8%) |
+| Most exposed ward | 83.6% |
+| Median ward | 0.03% |
+
+Three things must be read alongside those numbers:
+
+- **Pluvial flooding is not modelled.** The April 2022 KZN mechanism is out of
+  scope, and the caveat is attached to every flood row.
+- **Coastal flooding is zero for eThekwini at every published return period**,
+  and also at 2080 RCP8.5. The same raster floods Maputo Bay, so this is a model
+  result, not a failed download.
+- **The depth field is near-binary** — two values cover 99% of wet cells —
+  because the hydrology is 10 km. This is modelled extent with coarse depth
+  classes, not a continuous depth map ([ADR-010](docs/adr/010-flood-hazard-baseline-and-coastal-null.md)).
 
 ### Census ward population (Phase 3, not joined)
 
@@ -111,8 +149,10 @@ uv run climate-resilience wards        # 110 ward polygons, validated + crosswal
 uv run climate-resilience climate      # ERA5-derived daily Tmax
 uv run climate-resilience worldpop     # WorldPop 1 km clipped to eThekwini
 uv run climate-resilience census       # Census 2022 ward population (not joined)
+uv run climate-resilience flood        # Aqueduct baseline layers, clipped
 uv run climate-resilience mart         # heat rows + manifest + snapshot
 uv run climate-resilience exposure     # population exposure rows
+uv run climate-resilience flood-exposure  # flood rows
 uv run climate-resilience show --scope-level municipality --limit 10
 ```
 
@@ -123,8 +163,8 @@ Run `uv run climate-resilience --help` for all commands.
 
 ## One command, and what it promises
 
-`make data` runs `boundaries → wards → climate → worldpop → census → mart` in
-dependency order. Each source is isolated: a blocked optional source is recorded
+`make data` runs `boundaries → wards → climate → worldpop → flood → census →
+mart` in dependency order. Each source is isolated: a blocked optional source is recorded
 as `skipped`, while a failure in a source marked `required` in the catalogue
 exits non-zero and skips the build.
 
@@ -135,8 +175,9 @@ Every run writes `data/manifests/data-<run_id>.json`:
   ok   geoboundaries_zaf_adm4   110 wards, 110 crosswalk rows, 0 repaired
   ok   era5_openmeteo           84,010 rows across 5 cells, 1980-01-01..2025-12-31
   ok   worldpop                 3,654 cells, 3,766,001 persons, WorldPop 2020 1 km
+  ok   aqueduct_floods          21,258 cell-layers, 6 layers, 950 wet cell-layers
   ok   census_2022_ward_population 111 wards, 4,239,901 persons; not joined
-  ok   mart build               387 mart rows
+  ok   mart build               1,707 mart rows
 ```
 
 After each stage the declared artifact is hashed and compared with the
@@ -171,11 +212,13 @@ stage order or failure policy fails CI without a 150 MB download.
 | `spot_checks.py` | Known-point placement checks, including one that must miss |
 | `indicators/` | Registered, versioned, deterministic definitions |
 | `exposure.py` | WorldPop → ward and municipality population, separate from hazard |
+| `flood.py` | Aqueduct → ward and municipality flood exposure, per mechanism |
+| `indicators/flood.py` | Area-fraction and population-in-zone maths, pluvial refused |
 | `mart/` | Precomputed rows carrying evidence envelopes |
 | `envelope.py` | The contract that makes traceability enforceable |
 | `manifest.py` | Input/output hashing and run records |
 
-Six decisions shape everything else, and each has an ADR:
+Seven decisions shape everything else, and each has an ADR:
 
 1. **Precompute into a mart** ([ADR-001](docs/adr/001-precomputed-indicator-mart.md)) —
    no raster work at request time.
@@ -194,6 +237,11 @@ Six decisions shape everything else, and each has an ADR:
    ([ADR-009](docs/adr/009-exposure-resolution-and-vulnerability-gap.md)) — the
    100 m surface cannot be subset, and census ward indicators are not a bulk
    product. A gap is reported, not filled with a guess.
+7. **Flood is baseline-only, at any inundation depth, with coastal published as
+   a verified zero** ([ADR-010](docs/adr/010-flood-hazard-baseline-and-coastal-null.md))
+   — no cell reaches 0.5 m, so the default threshold would publish a column of
+   zeros; and the 2080 layers confound climate change with a change of forcing
+   dataset.
 
 ## Reproducibility
 
@@ -210,19 +258,24 @@ checksums, package versions and the git commit.
 
 ## Data
 
-Three datasets are active: geoBoundaries ZAF ADM2 (municipalities), geoBoundaries
-ZAF ADM4 (wards) and ERA5 via Open-Meteo, all CC BY 3.0 IGO / CC BY 4.0. All are
-**labelled substitutions** for the intended sources, because the MDB site was
-unreachable and no CDS credentials exist. The `mdb_wards` entry stays `blocked`
-rather than being deleted, so the substitution is visible in the catalogue.
-Details, gates and gaps: [`docs/data-catalogue.md`](docs/data-catalogue.md).
+Five datasets are active: geoBoundaries ZAF ADM2 (municipalities), geoBoundaries
+ZAF ADM4 (wards), ERA5 via Open-Meteo, WorldPop 2020 1 km, and Aqueduct Floods
+v2 baseline. The first three are **labelled substitutions** for the intended
+sources, because the MDB site was unreachable and no CDS credentials exist. The
+`mdb_wards` entry stays `blocked` rather than being deleted, so the substitution
+is visible in the catalogue. Details, gates and gaps:
+[`docs/data-catalogue.md`](docs/data-catalogue.md).
 
 Raw and derived data are git-ignored. The catalogue and manifests are the
 committed record.
 
 ## Not built yet
 
-Ward-level indicators (blocked by 5-cell climate resolution, not by code),
-exposure, vulnerability, projections, flood, fire, tools, assistant, PDF
-reports, AWS deployment. Specified in `climate-resilience.md`; nothing here
-should be read as claiming otherwise.
+Ward-level heat (blocked by 5-cell climate resolution, not by code),
+vulnerability, projections, fire, the tool layer, the assistant, PDF reports and
+the AWS deployment. Specified in `climate-resilience.md`; nothing here should be
+read as claiming otherwise.
+
+Flood projections are deliberately not built: the 2080 layers are forced by GCMs
+while the baseline uses WATCH, so the difference is not a clean climate signal
+([ADR-010](docs/adr/010-flood-hazard-baseline-and-coastal-null.md)).

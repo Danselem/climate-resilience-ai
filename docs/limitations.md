@@ -1,7 +1,7 @@
-# Limitations — Phase 3
+# Limitations — Phase 4
 
-Recorded at the end of Phase 3 exposure. Anything here is a known, deliberate
-gap, not an oversight. A limitation that changes an output is also recorded in that
+Recorded at the end of Phase 4 flood hazard. Anything here is a known,
+deliberate gap, not an oversight. A limitation that changes an output is also recorded in that
 output's `quality.warnings`.
 
 ## Spatial
@@ -83,6 +83,52 @@ output's `quality.warnings`.
   combined number would be invented. The assistant must abstain on vulnerability
   questions and say why.
 
+## Flood
+
+- **Pluvial (surface-water) flooding is not modelled.** This is the mechanism
+  responsible for much of the April 2022 KwaZulu-Natal damage. Every flood row
+  carries the caveat; a pluvial question must be refused, not answered with a
+  riverine number (I9).
+- **The 1 km raster is not a 1 km simulation.** The hydrology behind it is
+  PCR-GLOBWB at 5' (~10 km). Two depth values cover 99% of wet cells in each
+  riverine layer (0.466 m and 0.317 m at 100-year), because one water level is
+  partitioned over a finer terrain model. Treat the product as a modelled
+  extent with coarse depth classes, not a continuous depth field.
+- **No cell in eThekwini exceeds 0.5 m at any return period.** The published
+  threshold is therefore "any modelled inundation" rather than the 0.5 m
+  default; the deviation from §10.7 is recorded in
+  [ADR-010](adr/010-flood-hazard-baseline-and-coastal-null.md).
+- **Coastal flooding is zero, and that is a model result.** Aqueduct v2 shows no
+  coastal inundation for eThekwini at 10, 50 or 100 years, nor at 2080 RCP8.5
+  with median sea-level rise. The same raster inundates Maputo Bay, so the null
+  is a property of the model and this coastline, not a failed download. Coastal
+  rows are published as 0.0 with that warning attached.
+- **Extent saturates while depth triples.** Wet cells go 316 → 317 → 317 while
+  maximum depth goes 0.163 → 0.365 → 0.466 m between the 10- and 100-year
+  events. Area-based exposure barely separates return periods; population
+  exposure is flat at about 405,800. That is the source's behaviour at this
+  resolution.
+- **Ward exposure is highly concentrated.** Of 108 published wards, the median
+  riverine area fraction at 100 years is 0.03% and 9 wards exceed 50%; the
+  maximum is 83.6%. A single number for "the average ward" would describe almost
+  none of them.
+- **Population exposure is an upper bound.** The hazard model reports one depth
+  per cell, so everyone in a wet cell is counted as exposed even where water
+  would occupy part of it.
+- **Two harbour wards have no riverine input.** Wards 026 and 028 sit where the
+  riverine raster is nodata (the harbour); their riverine rows are withheld
+  rather than published as zero, and listed in the snapshot's `withheld` field.
+- **No flood defences, weirs or sluices are modelled**, and flash floods are
+  poorly captured — both stated in WRI's technical note.
+- **The GloFAS riverine cross-check is not implemented.** It needs CDS
+  credentials, which this environment does not have. The independent check is a
+  rasteriser recount of the same source: it verifies the pipeline, not the model.
+- **Projections are not published.** The 2080 RCP8.5 layers are forced by GCMs
+  while the baseline uses WATCH, so a difference is not a clean climate signal;
+  measured for eThekwini, the three-GCM spread brackets the baseline. The
+  coastal release also ships sea-level-rise percentiles 5 and 50 only, with no
+  high-end case.
+
 ## Analytical
 
 - **Heat is grid-level; exposure is ward-level.** The heat indicator is
@@ -94,8 +140,13 @@ output's `quality.warnings`.
   an area-weighted mean of integer cell counts, which is why they are fractional
   (0.223 days) and why `basis = derived`. Uncertainty bounds are the min/max
   across contributing cells, not a confidence interval.
-- **Two indicators only.** `hot_days_tmax_ge_35c` and
-  `population_count_worldpop`. No trends, projections, drought, fire or flood.
+- **Four indicators.** `hot_days_tmax_ge_35c`, `population_count_worldpop`,
+  `flood_exposed_area_pct` and `flood_exposed_population`. No trends,
+  projections, drought or fire.
+- **Hazard, exposure and vulnerability stay separate.** Flood exposure pairs a
+  hazard with a population denominator, which is why it is published. It is not
+  a risk score: no vulnerability input exists, no damages are modelled, and no
+  ranking is produced.
 - **No independent observational validation.** The benchmark compares the mart
   to an independent recount of the same source (`scripts/independent_check.py`).
   That proves the pipeline is correct, not that ERA5 matches Durban's weather
@@ -117,18 +168,22 @@ output's `quality.warnings`.
 - **WorldPop is downloaded whole.** The 7.3 MB 1 km national GeoTIFF is fetched
   and clipped locally. The 100 m equivalent is 609 MB with no resume; that is
   why it is not the MVP surface.
+- **Aqueduct is downloaded whole, deliberately.** Range requests work at the
+  host, but GDAL's `/vsicurl` request pattern is throttled with intermittent
+  403s, so a remote window read is not dependable. Six files (~410 MB) are
+  fetched and clipped locally, which also gives a real checksum per file.
 - **Stats SA pages are a bot challenge; files are not.** The catalogue cites the
   direct ward-product file. The HTML landing page cannot be fetched
   programmatically, so link rot would be detected by the artifact checksum, not
   by a page parser.
-- **A required source with no adapter fails the run.** `worldpop` is required
-  because exposure rows are published. `census_2022_ward_population` is active
-  but optional: it is acquired and validated, yet no published indicator depends
-  on it. `census_2022` remains blocked.
+- **A required source with no adapter fails the run.** `worldpop` and
+  `aqueduct_floods` are required because published indicators depend on them.
+  `census_2022_ward_population` is active but optional: it is acquired and
+  validated, yet no published indicator depends on it. `census_2022` remains
+  blocked.
 
 ## Not yet built
 
-Vulnerability indicators, projections, flood, fire, the tool layer, the
-assistant, PDF reports, and the AWS deployment are specified in
-`climate-resilience.md` and not implemented. Nothing in the repository should
-be read as claiming otherwise.
+Vulnerability indicators, projections, fire, the tool layer, the assistant, PDF
+reports, and the AWS deployment are specified in `climate-resilience.md` and not
+implemented. Nothing in the repository should be read as claiming otherwise.

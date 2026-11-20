@@ -222,3 +222,14 @@ def resolve_worldpop_path(settings: Settings, *, version: str | None = None) -> 
             f"({recorded[:12]}… -> {actual[:12]}…); re-run the stage"
         )
     return path
+
+
+def dataset_from_pointer(settings: Settings) -> DatasetRef:
+    """Read the recorded dataset reference, never re-derive it from disk."""
+    pointer = settings.processed_dir / "worldpop" / "latest.json"
+    if not pointer.exists():
+        raise FileNotFoundError(
+            f"no WorldPop pointer at {pointer}; run `climate-resilience worldpop` first"
+        )
+    payload = json.loads(pointer.read_text(encoding="utf-8"))
+    return DatasetRef.model_validate(payload["dataset"])

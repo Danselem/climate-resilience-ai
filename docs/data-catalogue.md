@@ -23,11 +23,15 @@ that is not true, CI fails.
 | `spatial_coverage`, `temporal_coverage`, `time_basis` | What the data does and does not cover |
 | `status` | `active`, `blocked`, `not_implemented`, `planned`, `context_only` |
 | `artifact` | Path to the acquired file, relative to the data directory |
+| `artifacts` | Every raw input with its own sha256, for multi-file sources |
 | `required` | `true` when a published indicator cannot be produced without it |
 | `known_gaps` | Stated limitations, not a wish list |
 
 `checksum` is the sha256 of `artifact`, so `make verify` can compare what is on
-disk with what the catalogue claims. An evidence envelope may pin a different
+disk with what the catalogue claims. `artifacts` exists because Aqueduct
+publishes six files for one dataset: a single hash cannot verify a multi-layer
+source, and hashing only the derived parquet would let a changed raw download go
+unnoticed. An evidence envelope may pin a different
 scope for the same dataset — climate envelopes pin the combined raw payload
 checksum, for example — and that is recorded per row rather than assumed.
 
@@ -50,20 +54,26 @@ units, identifiers, vintage and size have all been checked. A failed gate is
 recorded as `blocked` with the reason — for example `mdb_wards`, which was
 unreachable and remains blocked rather than quietly replaced.
 
-## Status at Phase 3
+## Status at Phase 4
 
 | Status | Datasets |
 |---|---|
-| active | `geoboundaries_zaf_adm2`, `geoboundaries_zaf_adm4`, `era5_openmeteo`, `worldpop`, `census_2022_ward_population` |
+| active | `geoboundaries_zaf_adm2`, `geoboundaries_zaf_adm4`, `era5_openmeteo`, `worldpop`, `census_2022_ward_population`, `aqueduct_floods` |
 | blocked | `mdb_wards`, `census_2022` |
 | not_implemented | `cds_era5` |
-| planned | `aqueduct_floods`, `nccis_projections`, `firms` |
+| planned | `nccis_projections`, `firms` |
 | context_only | `greenbook` |
 
 `mdb_wards` stays `blocked` even though ward geometry now exists: the entry
 records the authoritative source, and `geoboundaries_zaf_adm4` records what is
 actually in use. Keeping both makes the substitution visible rather than
 letting the blocked entry quietly disappear.
+
+`aqueduct_floods` is `active` at baseline only: six files, 10/50/100-year for
+riverine and coastal. Its entry records the four findings that shaped
+[ADR-010](adr/010-flood-hazard-baseline-and-coastal-null.md): the 0.5 m
+threshold is empty, coastal is a verified zero, the depth field is near-binary,
+and the 2080 layers are not a like-for-like delta from the baseline.
 
 `census_2022` is split in two deliberately. The full census is `blocked`:
 socio-economic indicators are published only through interactive tools, and

@@ -29,6 +29,8 @@ from . import catalogue as catalogue_module
 from .config import Settings
 from .envelope import now_utc
 from .exposure import build_exposure
+from .flood import build_flood
+from .ingestion.aqueduct import fetch_flood
 from .ingestion.census import fetch_census_ward_population
 from .ingestion.worldpop import fetch_worldpop
 from .manifest import git_commit, package_versions, sha256_file, sha256_obj
@@ -49,6 +51,7 @@ STAGE_BY_DATASET: dict[str, str] = {
     "geoboundaries_zaf_adm4": "wards",
     "era5_openmeteo": "climate",
     "worldpop": "worldpop",
+    "aqueduct_floods": "flood",
     "census_2022_ward_population": "census",
 }
 
@@ -59,6 +62,7 @@ STAGE_ORDER: tuple[str, ...] = (
     "wards",
     "climate",
     "worldpop",
+    "flood",
     "census",
 )
 
@@ -71,18 +75,25 @@ class PipelineSummary:
     content_hash: str
     heat_rows: int
     exposure_rows: int
+    flood_rows: int
 
 
 def build_all(settings: Settings) -> PipelineSummary:
     heat = build_mart(settings)
     exposure = build_exposure(settings)
+    flood = build_flood(settings)
     return PipelineSummary(
-        rows=heat.rows + exposure.rows,
+        rows=heat.rows + exposure.rows + flood.rows,
         content_hash=sha256_obj(
-            {"heat": heat.content_hash, "exposure": exposure.content_hash}
+            {
+                "heat": heat.content_hash,
+                "exposure": exposure.content_hash,
+                "flood": flood.content_hash,
+            }
         ),
         heat_rows=heat.rows,
         exposure_rows=exposure.rows,
+        flood_rows=flood.rows,
     )
 
 
@@ -163,6 +174,17 @@ def _run_worldpop(settings: Settings) -> str:
     )
 
 
+def _run_flood(settings: Settings) -> str:
+    municipality = load_or_fetch_municipality(settings)
+    extract = fetch_flood(settings, municipality)
+    layers = extract.summary["layers"]  # type: ignore[index]
+    wet = sum(int(layer["wet_cells"]) for layer in layers.values())  # type: ignore[index]
+    return (
+        f"{len(extract.frame):,} cell-layers, {len(layers)} layers, "
+        f"{wet} wet cell-layers, Aqueduct v2 baseline"
+    )
+
+
 def _run_census(settings: Settings) -> str:
     extract = fetch_census_ward_population(settings)
     summary = extract.summary
@@ -178,6 +200,7 @@ STAGE_RUNNERS: dict[str, Callable[[Settings], str]] = {
     "wards": _run_wards,
     "climate": _run_climate,
     "worldpop": _run_worldpop,
+    "flood": _run_flood,
     "census": _run_census,
 }
 
@@ -272,7 +295,7 @@ def _run_source(
     }
 
     if offline:
-        detail, sha = _check_artifact(entry, artifact)
+        detail, sha = _check_artifact(entry, artifact, data_dir=settings.data_dir)
         status: Status = "ok" if detail is None else "failed"
         return SourceResult(
             **base,
@@ -301,7 +324,7 @@ def _run_source(
         )
     elapsed = round(time.perf_counter() - tick, 3)
 
-    problem, sha = _check_artifact(entry, artifact)
+    problem, sha = _check_artifact(entry, artifact, data_dir=settings.data_dir)
     if problem is not None:
         return SourceResult(
             **base,
@@ -314,7 +337,10 @@ def _run_source(
 
 
 def _check_artifact(
-    entry: catalogue_module.DatasetEntry, path: Path | None
+    entry: catalogue_module.DatasetEntry,
+    path: Path | None,
+    *,
+    data_dir: Path,
 ) -> tuple[str | None, str | None]:
     """Compare an artifact against the catalogue. Returns (problem, sha256)."""
     if path is None:
@@ -328,6 +354,17 @@ def _check_artifact(
             f"(catalogue {entry.checksum[:12]}…, file {actual[:12]}…)",
             actual,
         )
+    for recorded in entry.artifacts:
+        raw = data_dir / recorded.path
+        if not raw.exists():
+            return f"recorded input missing at {raw}", actual
+        found = sha256_file(raw)
+        if found != recorded.sha256:
+            return (
+                f"input checksum mismatch at {raw} "
+                f"(catalogue {recorded.sha256[:12]}…, file {found[:12]}…)",
+                actual,
+            )
     return None, actual
 
 
@@ -381,7 +418,7 @@ def verify_artifacts(
         if entry.status != "active":
             continue
         artifact = settings.data_dir / entry.artifact if entry.artifact else None
-        problem, _ = _check_artifact(entry, artifact)
+        problem, _ = _check_artifact(entry, artifact, data_dir=settings.data_dir)
         if problem is not None:
             found.append((entry.id, problem))
     return found

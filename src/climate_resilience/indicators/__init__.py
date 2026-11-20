@@ -45,9 +45,36 @@ POPULATION_SPEC = IndicatorSpec(
     citation="WorldPop 2020 UN-adjusted, 1 km aggregated, CC BY 4.0",
 )
 
+FLOOD_AREA_SPEC = IndicatorSpec(
+    indicator_id="flood_exposed_area_pct",
+    hazard_type="flood",
+    unit="percent",
+    description="Share of a scope's area with modelled inundation depth at or above the threshold",
+    method_id="aqueduct_inundation_area_share",
+    method_version="1.0.0",
+    default_threshold=0.0,
+    citation="WRI Aqueduct Floods v2 hazard maps; riverine and coastal only, never summed",
+)
+
+FLOOD_POPULATION_SPEC = IndicatorSpec(
+    indicator_id="flood_exposed_population",
+    hazard_type="flood",
+    unit="persons",
+    description=(
+        "WorldPop persons in 1 km hazard cells with inundation depth at or above "
+        "the threshold"
+    ),
+    method_id="aqueduct_population_in_zone",
+    method_version="1.0.0",
+    default_threshold=0.0,
+    citation="WRI Aqueduct Floods v2 hazard maps; population areally interpolated from WorldPop",
+)
+
 REGISTRY: dict[str, IndicatorSpec] = {
     HEAT_SPEC.indicator_id: HEAT_SPEC,
     POPULATION_SPEC.indicator_id: POPULATION_SPEC,
+    FLOOD_AREA_SPEC.indicator_id: FLOOD_AREA_SPEC,
+    FLOOD_POPULATION_SPEC.indicator_id: FLOOD_POPULATION_SPEC,
 }
 
 

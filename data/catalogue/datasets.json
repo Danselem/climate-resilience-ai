@@ -242,28 +242,70 @@
     },
     {
       "id": "aqueduct_floods",
-      "name": "WRI Aqueduct Floods v2 (riverine and coastal)",
+      "name": "WRI Aqueduct Floods v2 hazard maps (riverine and coastal, baseline)",
       "role": "Flood hazard layer",
       "source_url": "https://www.wri.org/aqueduct",
-      "licence": "CC BY 4.0",
-      "version": "v2",
+      "licence": "CC BY 4.0 (WRI); attribution requested",
+      "version": "v2-historical-baseline",
       "basis": "modelled_estimate",
-      "units": "flood depth (m)",
+      "units": "inundation depth (m)",
       "crs": "EPSG:4326",
-      "native_resolution": "~1 km",
-      "spatial_coverage": "global",
-      "temporal_coverage": "baseline and future scenarios",
+      "native_resolution": "1 km raster from a 5' (~10 km) hydrological model",
+      "spatial_coverage": "global; clipped to eThekwini (3,543 valid cells per layer)",
+      "temporal_coverage": "baseline (EUWATCH 1960-1999); future 2030/2050/2080 not used",
       "time_basis": "return period",
-      "status": "planned",
-      "retrieved_at": null,
+      "status": "active",
+      "retrieved_at": "2026-11-20",
       "known_gaps": [
         "Pluvial (surface-water) flooding is not represented; this is a stated limitation, not a gap to fill",
-        "Return periods and scenario parameter set must be confirmed against the actual release",
-        "Resolution supports ward-scale statistics only, never property-level claims"
+        "Coastal baseline has no wet cell in eThekwini at 10/50/100 years; the same raster inundates Maputo Bay, so the null is a model result",
+        "No cell in eThekwini exceeds 0.5 m at any return period, so only the any-inundation threshold is published",
+        "Depth is near-binary per layer (two values cover 99% of wet cells) because the hydrology is 5' (~10 km)",
+        "Future RCP layers are forced by GCMs while the baseline uses WATCH, so a baseline-to-2080 difference is not a clean climate signal; projections are not published",
+        "The release ships coastal sea-level-rise percentiles 5 and 50 only; no perc_95 file exists despite the data dictionary",
+        "Two harbour wards (026, 028) have no riverine raster coverage and their riverine rows are withheld"
       ],
-      "processing_steps": [],
-      "required": false,
-      "artifact": null
+      "processing_steps": [
+        "Downloaded six baseline GeoTIFFs whole; range requests work but GDAL /vsicurl is throttled with intermittent 403s",
+        "Validated EPSG:4326, 1 degree/120 resolution (0.008333 deg), single band, nodata -9999 and the global 43200x21600 extent",
+        "Clipped each layer to the municipal bounding window and dropped cells that do not intersect the municipality",
+        "Stored one long table of cell/layer rows including dry cells, so coverage is measurable separately from exposure"
+      ],
+      "required": true,
+      "artifact": "processed/aqueduct_floods/v2-historical-baseline/ethekwini_flood_depth_1km.parquet",
+      "checksum": "cdbc5e1d5ed2f175e8073ca4993651141228f98ac714dd7718974243ab4e4097",
+      "artifacts": [
+        {
+          "path": "raw/aqueduct_floods/v2-historical-baseline/inunriver_historical_000000000WATCH_1980_rp00010.tif",
+          "sha256": "ac103ffc02e453fbba9558a33c78e00aefdd8dd551453ee72666affc53278001",
+          "role": "riverine 10-year baseline"
+        },
+        {
+          "path": "raw/aqueduct_floods/v2-historical-baseline/inunriver_historical_000000000WATCH_1980_rp00050.tif",
+          "sha256": "3cfd0099b3c0b59c418e8854cedf0a701fc4f516eb232e5252ad8513729e2fb2",
+          "role": "riverine 50-year baseline"
+        },
+        {
+          "path": "raw/aqueduct_floods/v2-historical-baseline/inunriver_historical_000000000WATCH_1980_rp00100.tif",
+          "sha256": "a63c94a3c7787f937d923e93465571c53cc4b2765678336c3ece78a491f2a5d7",
+          "role": "riverine 100-year baseline"
+        },
+        {
+          "path": "raw/aqueduct_floods/v2-historical-baseline/inuncoast_historical_nosub_hist_rp0010_0.tif",
+          "sha256": "8a2b8fa442cd154e38d8fab54a5b3fb31cf3692a710739d4814c552b95626843",
+          "role": "coastal 10-year baseline"
+        },
+        {
+          "path": "raw/aqueduct_floods/v2-historical-baseline/inuncoast_historical_nosub_hist_rp0050_0.tif",
+          "sha256": "80af82ac7d65fff552be9e7ddec3f8e6e3006d959ae94dbcb438b4d33c80ae16",
+          "role": "coastal 50-year baseline"
+        },
+        {
+          "path": "raw/aqueduct_floods/v2-historical-baseline/inuncoast_historical_nosub_hist_rp0100_0.tif",
+          "sha256": "03886accac54b4a6f7ebaff05e657aea115f05714d2376029edc3629ac871cb1",
+          "role": "coastal 100-year baseline"
+        }
+      ]
     },
     {
       "id": "nccis_projections",

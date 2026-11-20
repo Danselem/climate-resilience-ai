@@ -35,7 +35,13 @@ from .envelope import (
 )
 from .indicators import IndicatorSpec
 from .indicators import get as get_indicator
-from .ingestion.worldpop import RESOLUTION, resolve_worldpop_path
+from .ingestion.worldpop import (
+    RESOLUTION,
+    resolve_worldpop_path,
+)
+from .ingestion.worldpop import (
+    dataset_from_pointer as worldpop_dataset_from_pointer,
+)
 from .manifest import RunManifest, RunRecorder, content_hash, sha256_file
 from .mart.build import to_row
 from .spatial import project
@@ -86,8 +92,8 @@ def build_exposure(
     grid = pd.read_parquet(path)
     _validate_grid(grid)
 
-    dataset = worldpop_dataset or _dataset_from_pointer(settings)
-    wards = wards if wards is not None else _wards_from_store(settings)
+    dataset = worldpop_dataset or worldpop_dataset_from_pointer(settings)
+    wards = wards if wards is not None else wards_from_store(settings)
     if not wards:
         raise RuntimeError("no ward boundaries available; run the wards stage first")
 
@@ -132,7 +138,7 @@ def build_exposure(
                 period=period,
                 n_samples=counts.get(ward.ward_id, 0),
                 warnings=warnings,
-                datasets=[dataset, _ward_dataset(ward)],
+                datasets=[dataset, ward_dataset(ward)],
                 run=run,
             )
         )
@@ -254,17 +260,7 @@ def _validate_grid(grid: pd.DataFrame) -> None:
         raise ValueError("WorldPop grid has no population")
 
 
-def _dataset_from_pointer(settings: Settings) -> DatasetRef:
-    pointer = settings.processed_dir / "worldpop" / "latest.json"
-    if not pointer.exists():
-        raise FileNotFoundError(
-            f"no WorldPop pointer at {pointer}; run `climate-resilience worldpop` first"
-        )
-    payload = json.loads(pointer.read_text(encoding="utf-8"))
-    return DatasetRef.model_validate(payload["dataset"])
-
-
-def _wards_from_store(settings: Settings) -> list[WardGeometry]:
+def wards_from_store(settings: Settings) -> list[WardGeometry]:
     engine = repository.make_engine(settings.database_url)
     repository.ensure_schema(engine)
     rows = repository.fetch_boundaries(engine, level="ward")
@@ -295,7 +291,7 @@ def _ward_file(settings: Settings, version: str) -> Path:
     )
 
 
-def _ward_dataset(ward: WardGeometry) -> DatasetRef:
+def ward_dataset(ward: WardGeometry) -> DatasetRef:
     # The pilot's ward layer is ADM4; a future MDB layer must supply its own
     # source URL and licence rather than inheriting these.
     return DatasetRef(

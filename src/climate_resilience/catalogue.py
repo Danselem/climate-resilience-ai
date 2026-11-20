@@ -18,6 +18,14 @@ Basis = Literal["observation", "reanalysis", "projection", "modelled_estimate", 
 Status = Literal["active", "blocked", "not_implemented", "planned", "context_only"]
 
 
+class DatasetArtifact(BaseModel):
+    """One acquired file. A source may publish several, e.g. one per layer."""
+
+    path: str
+    sha256: str
+    role: str = "raw"
+
+
 class DatasetEntry(BaseModel):
     id: str
     name: str
@@ -38,6 +46,10 @@ class DatasetEntry(BaseModel):
     # Path to the acquired file, relative to the data directory. `checksum` is
     # the sha256 of this artifact, so a reader can verify what is on disk.
     artifact: str | None = None
+    # Additional acquired files. `checksum`/`artifact` describe the canonical
+    # output the pipeline reads; `artifacts` records every raw input, because a
+    # multi-layer source cannot be verified by a single hash.
+    artifacts: list[DatasetArtifact] = Field(default_factory=list)
     # True when a published indicator cannot be produced without this dataset.
     # A missing optional source is recorded and skipped; a missing required one
     # fails the run.
@@ -75,6 +87,11 @@ def validate(catalogue: Catalogue) -> list[str]:
             problems.append(f"{entry.id}: active dataset should record known gaps explicitly")
         if entry.status == "active" and not entry.artifact:
             problems.append(f"{entry.id}: active dataset declares no artifact path")
+        for artifact in entry.artifacts:
+            if len(artifact.sha256) != 64:
+                problems.append(
+                    f"{entry.id}: artifact {artifact.path} has a malformed sha256"
+                )
         if entry.required and entry.status != "active":
             problems.append(
                 f"{entry.id}: required dataset is not active (status={entry.status}); "
