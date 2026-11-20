@@ -23,7 +23,11 @@ from ..store.models import boundary, boundary_crosswalk, indicator_value
 from .models import Available, ScopeRef, ToolOutput
 
 MAX_RANK_LIMIT = 200
-WARD_PATTERN = re.compile(r"ward\s*0*(\d{1,3})", re.IGNORECASE)
+# "ward 75", "Wards 75 and 39", "ward_75". Models invent all three.
+WARD_PATTERN = re.compile(
+    r"\bwards?[\s_-]*((?:\d{1,3}(?:\s*(?:,|and|&)\s*)?)+)", re.IGNORECASE
+)
+NUMBER_PATTERN = re.compile(r"\d{1,3}")
 
 
 def _rows(engine: Engine, stmt: Select) -> list[dict[str, object]]:
@@ -140,6 +144,12 @@ def get_indicator(
             period_year=period_year,
         ),
     )
+    note: str | None = None
+    if scope_id is None:
+        # Without a scope the query would return every ward. Answer at
+        # municipality level and say so, rather than dumping 111 rows.
+        rows = [row for row in rows if row["scope_level"] == "municipality"]
+        note = "no scope given; answered for the municipality"
     if not rows:
         return ToolOutput.insufficient(
             f"no published {indicator_id} matches that scope, period or parameter",
@@ -149,7 +159,7 @@ def get_indicator(
 
     pairs = _pairs(rows)
     mechanisms = {envelope.mechanism for _, envelope in pairs if envelope.mechanism}
-    message = None
+    message = note
     if len(mechanisms) > 1:
         message = (
             "riverine and coastal rows are separate and must never be summed "
@@ -276,14 +286,17 @@ def resolve_scope(engine: Engine, *, query: str) -> ToolOutput:
         if lowered in {str(row["boundary_id"]).lower(), str(row["name"]).lower()}
     ]
     if not matches:
-        ward = WARD_PATTERN.search(lowered)
-        if ward:
-            number = int(ward.group(1))
+        numbers = {
+            int(raw)
+            for match in WARD_PATTERN.finditer(lowered)
+            for raw in NUMBER_PATTERN.findall(match.group(1))
+        }
+        if numbers:
             matches = [
                 row
                 for row in boundaries
                 if (crosswalk.get(str(row["boundary_id"])) or {}).get("ward_number")
-                == number
+                in numbers
             ]
     if not matches:
         matches = [row for row in boundaries if lowered in str(row["name"]).lower()]

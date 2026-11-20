@@ -153,6 +153,46 @@ def ask(
         typer.echo(f"error: {result.error}")
 
 
+@app.command("eval-assistant")
+def eval_assistant(
+    limit: int | None = typer.Option(None, help="Run only the first N items"),
+    model: str | None = typer.Option(None, help="Override the configured model"),
+    category: str | None = typer.Option(
+        None, help="Only run one category: analytical, document, abstain, adversarial"
+    ),
+) -> None:
+    """Run the gold set and report pass/fail, latency and cost."""
+    from .evaluation.runner import load_benchmark, run_benchmark, summarise
+
+    settings = get_settings()
+    items = load_benchmark()
+    if category:
+        items = [item for item in items if item.category == category]
+    report = run_benchmark(settings, model=model, limit=limit, items=items)
+    summary = summarise(report)
+
+    typer.echo(f"items         : {summary['items']}")
+    typer.echo(f"passed        : {summary['passed']} ({summary['accuracy']:.0%})")
+    for name, (total, passed) in sorted(summary["by_category"].items()):
+        typer.echo(f"  {name:<12} {passed}/{total}")
+    typer.echo(f"latency p50/95: {summary['latency_p50']}s / {summary['latency_p95']}s")
+    typer.echo(f"cost          : mean ${summary['mean_cost_usd']} "
+               f"total ${summary['total_cost_usd']}")
+    typer.echo(f"errors        : {summary['errors']}")
+
+    failures = report.failures()
+    if failures:
+        typer.echo("")
+        typer.echo("failures:")
+        for item in failures:
+            typer.echo(f"  {item.id}: {'; '.join(item.failures)}")
+
+    target = settings.manifest_dir / f"eval-{report.run_at.replace(':', '').replace('-', '')}.json"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(report.model_dump_json(indent=2), encoding="utf-8")
+    typer.echo(f"report        : {target}")
+
+
 @app.command()
 def documents(
     only: str | None = typer.Option(None, help="Ingest a single document id"),

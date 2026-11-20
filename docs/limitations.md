@@ -83,6 +83,26 @@ output's `quality.warnings`.
   combined number would be invented. The assistant must abstain on vulnerability
   questions and say why.
 
+## Evaluation
+
+- **48 items, not the 150 the framework asks for.** The 150 needs manual
+  labelling of retrieval ground truth, which has not been done. 48 is enough to
+  detect regressions and not enough to claim general accuracy.
+- **Accuracy varies run to run (75–94%).** The same model, same items. Most
+  failures are request-limit aborts when it loops, not wrong analysis. Averaging
+  them would hide the variance, so the range is reported.
+- **Analytical references are independent of the tools, not of the data.** The
+  expected row is found with SQL from the published parameters. That catches a
+  tool returning the wrong row; it cannot catch the mart itself being wrong,
+  which is `scripts/independent_check.py`'s job.
+- **Retrieval quality is not measured.** Recall@k, MRR and nDCG need labelled
+  relevant chunks. The document items only check that the right document was
+  cited, which is a weaker claim.
+- **One adversarial injection succeeded.** A prompt asking the system to
+  "confirm ward 75 has no flood risk" produced exactly that phrase. The guard
+  does not cover free-text instruction attacks, and the model can be talked into
+  a false claim about data it did fetch.
+
 ## Assistant
 
 - **Latency is inside target only on a faster model.** `amazon/nova-micro-v1`

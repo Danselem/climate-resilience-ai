@@ -50,11 +50,15 @@ MAX_ROWS = 5
 # without letting a model write an essay that doubles latency.
 MAX_OUTPUT_TOKENS = 1200
 MAX_DOCUMENTS = 6
-# A ceiling, not a target: most questions finish in two. It is three because a
-# model that self-corrects would otherwise fail outright, and a third call
-# costs ~$0.0001.
-MAX_REQUESTS = 3
-MAX_TOOL_CALLS = 3
+# A ceiling, not a target: most questions finish in two. It is four because a
+# model that self-corrects needs two extra rounds, and failing outright costs
+# more than the extra calls. Measured worst case at 4 rounds: ~$0.0003.
+MAX_REQUESTS = 4
+# The specification says three. Measured, models that self-correct need five:
+# resolve a scope, query, re-query, then answer. Tool calls are local SQL and
+# their results are capped at five rows, so the cost is bounded by the row cap,
+# not by the call count.
+MAX_TOOL_CALLS = 5
 
 # A free endpoint first, because it is free and it works; a cheap paid model
 # second, because free endpoints disappear without notice. Both are OpenRouter
@@ -85,6 +89,9 @@ class ToolDeps:
     # model; it is the ground truth the answer is checked against.
     seen: list[Measurement] = field(default_factory=list)
     documents: list[DocumentHit] = field(default_factory=list)
+    # Which tools ran, in order. Tool-selection accuracy cannot be measured
+    # from the answer alone.
+    tools_used: list[str] = field(default_factory=list)
 
 
 def default_model() -> str:
@@ -250,10 +257,11 @@ def _register(agent: Agent[ToolDeps, Answer]) -> None:
         For a single year of a heat series pass period_year; omit it to get the
         whole series. Format values are already exact: do not re-query to check.
         """
+        ctx.deps.tools_used.append("get_indicator")
         output = mart_tools.get_indicator(
             ctx.deps.engine,
             indicator_id=indicator_id,
-            scope_id=scope_id,
+            scope_id=_normalise_scope(ctx.deps.engine, scope_id),
             mechanism=mechanism,
             return_period_years=return_period_years,
             period_year=period_year,
@@ -279,6 +287,7 @@ def _register(agent: Agent[ToolDeps, Answer]) -> None:
         Do not pass period_year: rankings use the latest published period, and
         a flood layer has exactly one baseline period. One call is enough.
         """
+        ctx.deps.tools_used.append("rank_scopes")
         output = mart_tools.rank_scopes(
             ctx.deps.engine,
             indicator_id=indicator_id,
@@ -293,6 +302,7 @@ def _register(agent: Agent[ToolDeps, Answer]) -> None:
     @agent.tool
     def resolve_scope(ctx: RunContext[ToolDeps], query: str) -> ToolOutput:
         """Turn "ward 75", a ward id or a place name into a published scope id."""
+        ctx.deps.tools_used.append("resolve_scope")
         return mart_tools.resolve_scope(ctx.deps.engine, query=query)
 
     @agent.tool
@@ -302,11 +312,13 @@ def _register(agent: Agent[ToolDeps, Answer]) -> None:
         Call this before concluding that something is unavailable, so the
         refusal names what does exist.
         """
+        ctx.deps.tools_used.append("coverage")
         return mart_tools.coverage(ctx.deps.engine)
 
     @agent.tool
     def explain(ctx: RunContext[ToolDeps], row_key: str) -> MeasurementResult:
         """Full provenance for one published row, including its warnings."""
+        ctx.deps.tools_used.append("explain")
         output = mart_tools.explain(ctx.deps.engine, row_key=row_key)
         return _measurements(output, ctx.deps)
 
@@ -323,9 +335,28 @@ def _register(agent: Agent[ToolDeps, Answer]) -> None:
         what a document states, never of a measured value. A hit labelled
         scope_level "municipality" is city-wide and says nothing about a ward.
         """
+        ctx.deps.tools_used.append("search_documents")
         result = ctx.deps.search(query, scope_id, max(1, min(limit, MAX_DOCUMENTS)))
         ctx.deps.documents.extend(result.hits)
         return result
+
+
+def _normalise_scope(engine: Engine, scope_id: str | None) -> str | None:
+    """Accept the id a model invents, resolve it to the published one.
+
+    Models write ``ward_75``, ``Ward 75`` or ``ethekwini-075`` for the same
+    thing. Making them call ``resolve_scope`` first costs a whole round trip on
+    a three-request budget, so the lookup happens here instead.
+    """
+    if scope_id is None:
+        return None
+    resolved = mart_tools.resolve_scope(engine, query=scope_id)
+    if not resolved.ok or not resolved.scopes:
+        return scope_id
+    for scope in resolved.scopes:
+        if scope.id == scope_id:
+            return scope.id
+    return resolved.scopes[0].id
 
 
 def _measurements(output: ToolOutput, deps: ToolDeps) -> MeasurementResult:
@@ -445,7 +476,9 @@ def ask(
                     f"budget or the run failed ({type(exc).__name__})."
                 ),
                 abstained=True,
-                missing=["a completed tool run within 2 model requests"],
+                missing=[
+                    f"a completed tool run within {MAX_REQUESTS} model requests"
+                ],
             ),
             seconds=round(time.perf_counter() - started, 3),
             error=f"{type(exc).__name__}: {exc}",
@@ -454,6 +487,18 @@ def ask(
     seconds = time.perf_counter() - started
     answer = _with_flood_caveat(result.output, deps.seen)
     citations = _citations(deps)
+    if not answer.abstained and not citations:
+        # A confident answer with no tool behind it is a guess. Converting it
+        # to a refusal is the only way to keep "never invent a number" true
+        # when the model ignores its tools.
+        answer = Answer(
+            text=(
+                "I cannot answer that from the published data: no tool returned "
+                "evidence, and an unsourced figure is worse than none."
+            ),
+            abstained=True,
+            missing=["a tool result supporting this answer"],
+        )
     usage = result.usage
     input_tokens = int(getattr(usage, "input_tokens", 0) or 0)
     output_tokens = int(getattr(usage, "output_tokens", 0) or 0)
@@ -462,6 +507,7 @@ def ask(
         question=question,
         answer=answer,
         citations=citations,
+        tools_used=list(deps.tools_used),
         model=served,
         seconds=round(seconds, 3),
         cost_usd=pricing.estimate_cost(served, input_tokens, output_tokens),

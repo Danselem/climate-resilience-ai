@@ -38,6 +38,8 @@ MEASUREMENT_TERMS = (
     "what share",
     "what fraction",
     "which wards",
+    "what is the",
+    "what are the",
     "how exposed",
     "exposed to",
     "risk score",
@@ -68,9 +70,30 @@ DOCUMENT_TERMS = (
     "what do the",
 )
 
+# The pilot covers one municipality. A measurement question about another city
+# has no answer here, and inventing one is the worst possible outcome.
+OTHER_MUNICIPALITIES = (
+    "cape town",
+    "johannesburg",
+    "pretoria",
+    "tshwane",
+    "ekurhuleni",
+    "nelson mandela bay",
+    "buffalo city",
+    "msunduzi",
+    "pietermaritzburg",
+    "richards bay",
+)
+
 UNSUPPORTED = (
     (
-        ("vulnerability", "socio-economic", "socioeconomic", "poverty rate"),
+        (
+            "vulnerability",
+            "socio-economic",
+            "socioeconomic",
+            "poverty",
+            "below the poverty line",
+        ),
         "No vulnerability indicator is published. Census 2022 socio-economic "
         "data exists only in interactive tools, and its 111 wards do not match "
         "the 110 ADM4 boundaries (ADR-009).",
@@ -123,6 +146,16 @@ def preflight(question: str) -> Refusal | None:
 
     if any(term in lowered for term in PLUVIAL_TERMS):
         return Refusal(PLUVIAL_REASON, ["a pluvial flood hazard layer"])
+
+    elsewhere = next(
+        (place for place in OTHER_MUNICIPALITIES if place in lowered), None
+    )
+    if elsewhere and "ethekwini" not in lowered and "durban" not in lowered:
+        return Refusal(
+            f"Only eThekwini is published in this pilot; {elsewhere.title()} is "
+            "outside its boundary. No figure is available for it.",
+            [f"data for {elsewhere.title()}"],
+        )
 
     for terms, reason, missing in UNSUPPORTED:
         if any(term in lowered for term in terms):

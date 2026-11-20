@@ -147,6 +147,7 @@ class AssistantResult(BaseModel):
     question: str
     answer: Answer
     citations: list[Citation] = Field(default_factory=list)
+    tools_used: list[str] = Field(default_factory=list)
     refused_by_guard: bool = False
     # Which model actually served the run. With a fallback chain this is not
     # knowable from configuration, and a latency figure is meaningless without
