@@ -4,7 +4,9 @@
 
 services:
   db:
-    image: postgis/postgis:16-3.4
+    build:
+      context: ./docker/db
+    image: crp-postgis-pgvector:16
     environment:
       POSTGRES_USER: crp
       POSTGRES_PASSWORD: crp

@@ -1,0 +1,14 @@
+{
+  "documents": [
+    {
+      "id": "greenbook-ethekwini",
+      "title": "GreenBook municipal risk profile — eThekwini",
+      "publisher": "CSIR",
+      "source_url": "https://riskprofiles.greenbook.co.za/",
+      "licence": "CC BY-NC-SA 3.0 ZA (non-commercial, share-alike)",
+      "version": "2019",
+      "status": "excluded",
+      "notes": "NonCommercial and ShareAlike terms are incompatible with a commercial derived index. Excluded pending written permission from CSIR: reading reference only, never ingested."
+    }
+  ]
+}

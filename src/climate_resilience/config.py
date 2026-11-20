@@ -34,6 +34,11 @@ class Settings(BaseSettings):
     # Expected ward count for the pilot municipality, used as a validation gate.
     expected_ward_count: int = 110
 
+    # Document index (pgvector). Deliberately a different store from the mart:
+    # prose needs similarity search, measurements need exact keys.
+    documents_dsn: str = "postgresql://crp:crp@localhost:5433/crp"
+    embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2"
+
     log_level: str = "INFO"
 
     @property
