@@ -39,6 +39,13 @@ output's `quality.warnings`.
   is assumed to interpolate or complete the series, but that behaviour is
   undocumented, so `coverage_pct = 100` should be read as "the provider returned
   a value", not "an observation existed".
+- **The window ends at the last complete calendar year.** The published range is
+  1980–2025: 46 complete years. The last two to three months of this feed are
+  preliminary ERA5T and can be revised, so a window ending "today" could change
+  its numbers without any change to code or inputs. A year is published only if
+  its observations span 1 January to 31 December *and* meet the coverage gate;
+  coverage alone would have labelled a series ending in November as a full year
+  ([ADR-008](adr/008-analysis-window-and-revisions.md)).
 
 ## Analytical
 

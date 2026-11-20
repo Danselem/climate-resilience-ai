@@ -100,6 +100,7 @@ def test_empty_series_returns_empty_frame() -> None:
         "n_obs",
         "days_in_year",
         "coverage",
+        "complete",
         "status",
     ]
 
@@ -120,3 +121,40 @@ def test_area_weighted_mean_respects_weights() -> None:
 def test_area_weighted_mean_rejects_empty_input() -> None:
     with pytest.raises(ValueError):
         area_weighted_mean([None], [1.0])
+
+
+def test_a_year_that_stops_in_november_is_not_published() -> None:
+    index = pd.date_range("2026-01-01", "2026-11-20", freq="D")
+    values = pd.Series(36.0, index=index)
+
+    result = annual_extreme_day_counts(values, threshold_c=35.0, min_coverage=0.90)
+    row = result.iloc[0]
+
+    assert bool(row["complete"]) is False
+    assert row["status"] == "withheld", "coverage is not completeness"
+    assert row["coverage"] > 0.85
+
+
+def test_a_year_on_the_ninety_percent_boundary_is_still_withheld() -> None:
+    # 329 of 365 days is 90.1% coverage: enough by coverage, not a full year.
+    index = pd.date_range("2026-01-01", "2026-11-25", freq="D")
+    assert len(index) == 329
+    result = annual_extreme_day_counts(
+        pd.Series(36.0, index=index), threshold_c=35.0, min_coverage=0.90
+    )
+    assert result.iloc[0]["coverage"] >= 0.90
+    assert result.iloc[0]["status"] == "withheld"
+
+
+def test_a_complete_year_with_a_few_missing_days_is_published() -> None:
+    index = pd.date_range("2025-01-01", "2025-12-31", freq="D")
+    values = pd.Series(36.0, index=index)
+    values.iloc[[10, 200, 300]] = float("nan")
+
+    result = annual_extreme_day_counts(values, threshold_c=35.0, min_coverage=0.90)
+    row = result.iloc[0]
+
+    assert bool(row["complete"]) is True
+    assert row["coverage"] == pytest.approx(362 / 365)
+    assert row["status"] == "ok"
+    assert row["n_obs"] == 362

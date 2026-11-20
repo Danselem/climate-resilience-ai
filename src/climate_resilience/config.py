@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import date
 from functools import lru_cache
 from pathlib import Path
 
@@ -18,8 +19,11 @@ class Settings(BaseSettings):
     municipality: str = "eThekwini"
 
     # Climate data window for the historical baseline.
+    # `history_end = None` means "the last complete calendar year", resolved at
+    # fetch time and recorded in the dataset version. Set it explicitly to pin
+    # a window. A partial year is never published (see indicators/heat.py).
     history_start: str = "1980-01-01"
-    history_end: str = "2024-12-31"
+    history_end: str | None = None
 
     # Grid cell size of the ERA5 native resolution, in degrees.
     era5_cell_deg: float = 0.25
@@ -52,3 +56,16 @@ class Settings(BaseSettings):
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
     return Settings()
+
+
+def resolve_history_end(history_end: str | None, *, today: date | None = None) -> str:
+    """Return an explicit end date, or the last complete calendar year.
+
+    A dynamic default must still yield a reproducible run, so the resolved
+    value is written into the dataset version and the run manifest. Fetching
+    again in January produces a new version, not a mutated one.
+    """
+    if history_end:
+        return history_end
+    today = today or date.today()
+    return date(today.year - 1, 12, 31).isoformat()

@@ -451,7 +451,7 @@ Written by every pipeline stage and mart build:
   "stage": "build_mart",
   "git_commit": "abc1234",
   "inputs": [{"path": "...", "sha256": "..."}],
-  "parameters": {"period": ["1980-01-01", "2024-12-31"],
+  "parameters": {"period": ["1980-01-01", "2025-12-31"],
                  "flood_return_periods": [10, 50, 100],
                  "flood_depth_threshold_m": 0.5},
   "outputs": [{"path": "...", "sha256": "..."}],

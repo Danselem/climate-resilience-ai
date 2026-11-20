@@ -16,12 +16,13 @@ validated ward boundary layer and crosswalk. See
 ## What works today
 
 `hot_days_tmax_ge_35c` — days per calendar year with daily maximum temperature
-at or above 35 °C — for 1980–2024, at ERA5 grid-cell level and as an
+at or above 35 °C — for 1980–2025, at ERA5 grid-cell level and as an
 area-weighted municipal aggregate, with full provenance and a reproducibility
-check.
+check. Only complete calendar years are published
+([ADR-008](docs/adr/008-analysis-window-and-revisions.md)).
 
 ```
-municipality       1980   0.000    2024   2.347
+municipality       1980   0.000    2025   2.701
                   (area-weighted, derived)
 ```
 
@@ -97,8 +98,8 @@ Every run writes `data/manifests/data-<run_id>.json`:
 ```
   ok   geoboundaries_zaf_adm2   eThekwini: 2,556.6 km², vintage 2020
   ok   geoboundaries_zaf_adm4   110 wards, 110 crosswalk rows, 0 repaired
-  ok   era5_openmeteo           82,185 rows across 5 cells, 1980-01-01..2024-12-31
-  ok   mart build               270 mart rows
+  ok   era5_openmeteo           84,010 rows across 5 cells, 1980-01-01..2025-12-31
+  ok   mart build               276 mart rows
 ```
 
 After each stage the declared artifact is hashed and compared with the
@@ -135,7 +136,7 @@ stage order or failure policy fails CI without a 150 MB download.
 | `envelope.py` | The contract that makes traceability enforceable |
 | `manifest.py` | Input/output hashing and run records |
 
-Four decisions shape everything else, and each has an ADR:
+Five decisions shape everything else, and each has an ADR:
 
 1. **Precompute into a mart** ([ADR-001](docs/adr/001-precomputed-indicator-mart.md)) —
    no raster work at request time.
@@ -147,6 +148,9 @@ Four decisions shape everything else, and each has an ADR:
 4. **One command acquires, and sources fail independently**
    ([ADR-007](docs/adr/007-one-command-acquisition.md)) — a blocked source is
    reported, not silently dropped or allowed to abort the run.
+5. **The analysis window ends at the last complete calendar year**
+   ([ADR-008](docs/adr/008-analysis-window-and-revisions.md)) — a partial year
+   is withheld, never labelled as a full one.
 
 ## Reproducibility
 

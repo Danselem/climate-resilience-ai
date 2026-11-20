@@ -13,7 +13,7 @@ from typing import Any
 
 import pandas as pd
 
-from .config import Settings
+from .config import Settings, resolve_history_end
 from .crosswalk import build_crosswalk
 from .envelope import RunRef, now_utc
 from .indicators import get as get_indicator
@@ -101,12 +101,13 @@ def weights_from_frame(
 def fetch_climate(
     settings: Settings, weights: list[CellWeight], *, version: str | None = None
 ) -> ClimateExtract:
-    version = version or f"archive-{settings.history_start}_{settings.history_end}"
+    end = resolve_history_end(settings.history_end)
+    version = version or f"archive-{settings.history_start}_{end}"
     extract = fetch_daily_tmax(
         settings,
         [w.cell for w in weights],
         start=settings.history_start,
-        end=settings.history_end,
+        end=end,
         version=version,
     )
     write_climate_pointer(settings, version=version, path=extract.processed_path)

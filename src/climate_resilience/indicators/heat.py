@@ -11,7 +11,15 @@ import calendar
 
 import pandas as pd
 
-DAY_COUNT_COLUMNS = ["year", "days", "n_obs", "days_in_year", "coverage", "status"]
+DAY_COUNT_COLUMNS = [
+    "year",
+    "days",
+    "n_obs",
+    "days_in_year",
+    "coverage",
+    "complete",
+    "status",
+]
 
 
 def annual_extreme_day_counts(
@@ -28,6 +36,11 @@ def annual_extreme_day_counts(
             inclusive: a value exactly at the threshold counts.
         min_coverage: Minimum fraction of the year's days with observations
             before the year is published.
+
+    A year is published only if it is *complete* -- its observations span
+    1 January to 31 December -- and meets ``min_coverage``. Coverage alone is
+    not sufficient: a series that stops in November can still cover 90% of the
+    year while being, unmistakably, not a full year.
 
     Returns:
         DataFrame with one row per year present in the input.
@@ -58,6 +71,13 @@ def annual_extreme_day_counts(
         {
             "days": grouped.apply(lambda s: int((s >= threshold_c).sum())),
             "n_obs": grouped.apply(lambda s: int(s.notna().sum())),
+            # Completeness is about the observation window, not the count:
+            # a series that stops in November is not a calendar year even if
+            # every day it contains has a value.
+            "complete": grouped.apply(
+                lambda s: (s.index.min().month, s.index.min().day) == (1, 1)
+                and (s.index.max().month, s.index.max().day) == (12, 31)
+            ),
         }
     ).reset_index()
 
@@ -65,8 +85,10 @@ def annual_extreme_day_counts(
         lambda y: 366 if calendar.isleap(int(y)) else 365
     )
     result["coverage"] = result["n_obs"] / result["days_in_year"]
+    result["complete"] = result["complete"].astype(bool)
     result["status"] = [
-        "ok" if cov >= min_coverage else "withheld" for cov in result["coverage"]
+        "ok" if complete and cov >= min_coverage else "withheld"
+        for cov, complete in zip(result["coverage"], result["complete"], strict=True)
     ]
     return result[DAY_COUNT_COLUMNS]
 

@@ -71,32 +71,33 @@
       "role": "Historical heat baseline",
       "source_url": "https://archive-api.open-meteo.com/v1/archive",
       "licence": "CC BY 4.0 (Open-Meteo); underlying reanalysis: Copernicus ERA5",
-      "version": "archive-1980-01-01_2024-12-31",
-      "checksum": "9fe1ae5276516c722fec6e6a3a32dd6ffe58e2e8e15efce7afd135a24c646e35",
+      "version": "archive-1980-01-01_2025-12-31",
+      "checksum": "2318306d8388be9d7fdf8bf222e29271968e40e06b755cfe828a026aca7a487e",
       "basis": "reanalysis",
       "units": "degC",
       "crs": "EPSG:4326 (point locations reported by the source)",
       "native_resolution": "0.25 deg (~28 km), 5 grid points returned for eThekwini",
       "spatial_coverage": "eThekwini bounding box grid points",
-      "temporal_coverage": "1980-01-01 to 2024-12-31, daily",
+      "temporal_coverage": "1980-01-01 to 2025-12-31, daily",
       "time_basis": "local_day Africa/Johannesburg (UTC+2)",
       "status": "active",
-      "retrieved_at": "2026-11-19",
+      "retrieved_at": "2026-11-20",
       "known_gaps": [
         "Secondary distribution of ERA5, not the Copernicus CDS product itself; CDS adapter not implemented",
         "0.25 deg resolution cannot resolve ward-level differences; results are reported per grid cell",
         "Returned grid coordinates are snapped by the provider and are not exact 0.25 deg multiples",
-        "No missing days reported for this period; gap-filling behaviour of the provider is undocumented"
+        "No missing days reported for this period; gap-filling behaviour of the provider is undocumented",
+        "The most recent 2-3 months of this feed are preliminary ERA5T and can be revised; the window ends at the last complete calendar year to stay outside that revision range (ADR-008)"
       ],
       "processing_steps": [
         "Selected grid cells intersecting the eThekwini boundary",
-        "Requested daily temperature_2m_max for each cell, 1980-2024, local-day timezone",
+        "Requested daily temperature_2m_max for each cell, 1980-2025, local-day timezone",
         "Recorded the provider's reported latitude/longitude as the data location",
         "Stored raw JSON payloads immutably, then wrote a canonical Parquet table",
         "Enforced unique (cell_id, date) and numeric coercion of missing values"
       ],
       "required": true,
-      "artifact": "processed/era5_openmeteo/archive-1980-01-01_2024-12-31/daily_tmax.parquet"
+      "artifact": "processed/era5_openmeteo/archive-1980-01-01_2025-12-31/daily_tmax.parquet"
     },
     {
       "id": "mdb_wards",
