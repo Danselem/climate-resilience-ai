@@ -57,6 +57,23 @@ output's `quality.warnings`.
   That proves the pipeline is correct, not that ERA5 matches Durban's weather
   stations.
 
+## Acquisition
+
+- **`make data` re-runs stages whose inputs are already cached.** The cost is
+  seconds of parsing, not bandwidth. There is no per-stage skip rule, so a
+  source cannot go stale unnoticed: its artifact is re-hashed against the
+  catalogue every run.
+- **`make data-offline` proves the cache, not the network.** It verifies
+  checksums and skips the build. A green offline run says the files match the
+  catalogue; it says nothing about whether the upstream URL would still serve
+  them.
+- **Boundary downloads are national, not subset.** The ADM4 release arrives as a
+  ~150 MB GeoJSON for South Africa and is filtered to the 110 eThekwini
+  features locally. There is no server-side subset for this source.
+- **A required source with no adapter fails the run.** `census_2022` and
+  `worldpop` are currently `planned` and not required; when one is promoted to
+  required, its adapter must exist or `make data` will say so.
+
 ## Not yet built
 
 Ward-level indicators, exposure, vulnerability, projections, flood, fire, the

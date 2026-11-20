@@ -28,7 +28,9 @@
         "Extracted the single feature whose name contains 'eThekwini'",
         "Validated geometry validity and computed area in EPSG:32736 (2,556.6 km2)",
         "Wrote a normalised FeatureCollection with source, licence and vintage recorded"
-      ]
+      ],
+      "required": true,
+      "artifact": "raw/geoboundaries_zaf_adm2/adm2-2020/geoBoundaries-ZAF-ADM2.geojson"
     },
     {
       "id": "geoboundaries_zaf_adm4",
@@ -59,7 +61,9 @@
         "Parsed ward numbers from the feature name and recorded the provenance of that code",
         "Validated geometry validity, containment and area reconciliation against the ADM2 municipality",
         "Persisted ward geometry and a ward-to-municipality crosswalk in the boundary tables"
-      ]
+      ],
+      "required": true,
+      "artifact": "raw/geoboundaries_zaf_adm4/adm4-2020/geoBoundaries-ZAF-ADM4.geojson"
     },
     {
       "id": "era5_openmeteo",
@@ -90,7 +94,9 @@
         "Recorded the provider's reported latitude/longitude as the data location",
         "Stored raw JSON payloads immutably, then wrote a canonical Parquet table",
         "Enforced unique (cell_id, date) and numeric coercion of missing values"
-      ]
+      ],
+      "required": true,
+      "artifact": "processed/era5_openmeteo/archive-1980-01-01_2024-12-31/daily_tmax.parquet"
     },
     {
       "id": "mdb_wards",
@@ -114,7 +120,9 @@
         "Release vintage must be matched to Census 2022 ward geography before any census join",
         "Replace the substitute layer when the MDB release is reachable"
       ],
-      "processing_steps": []
+      "processing_steps": [],
+      "required": false,
+      "artifact": null
     },
     {
       "id": "cds_era5",
@@ -136,7 +144,9 @@
         "No CDS account or licence acceptance in this environment",
         "Adapter contract declared in src/climate_resilience/ingestion/cds_era5.py; not exercised"
       ],
-      "processing_steps": []
+      "processing_steps": [],
+      "required": false,
+      "artifact": null
     },
     {
       "id": "census_2022",
@@ -158,7 +168,9 @@
         "Ward-level machine-readable availability unverified",
         "Small-cell suppression rules must be applied before publishing ward statistics"
       ],
-      "processing_steps": []
+      "processing_steps": [],
+      "required": false,
+      "artifact": null
     },
     {
       "id": "worldpop",
@@ -180,7 +192,9 @@
         "Release must be pinned to the census vintage used by Census 2022",
         "Constrained vs unconstrained product choice not yet made"
       ],
-      "processing_steps": []
+      "processing_steps": [],
+      "required": false,
+      "artifact": null
     },
     {
       "id": "aqueduct_floods",
@@ -203,7 +217,9 @@
         "Return periods and scenario parameter set must be confirmed against the actual release",
         "Resolution supports ward-scale statistics only, never property-level claims"
       ],
-      "processing_steps": []
+      "processing_steps": [],
+      "required": false,
+      "artifact": null
     },
     {
       "id": "nccis_projections",
@@ -225,7 +241,9 @@
         "Download mechanics and file format unverified",
         "Scenario and model labelling must be recorded per row"
       ],
-      "processing_steps": []
+      "processing_steps": [],
+      "required": false,
+      "artifact": null
     },
     {
       "id": "firms",
@@ -246,7 +264,9 @@
       "known_gaps": [
         "Confidence filtering rule not yet fixed"
       ],
-      "processing_steps": []
+      "processing_steps": [],
+      "required": false,
+      "artifact": null
     },
     {
       "id": "greenbook",
@@ -268,7 +288,9 @@
         "Packages are documents and dashboards rather than a tidy API",
         "No analytic depends on parsing GreenBook"
       ],
-      "processing_steps": []
+      "processing_steps": [],
+      "required": false,
+      "artifact": null
     }
   ]
 }

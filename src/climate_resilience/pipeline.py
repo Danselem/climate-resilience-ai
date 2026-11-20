@@ -27,6 +27,8 @@ from .spot_checks import SpotResult, check_points
 from .store import repository
 from .store.models import indicator_value
 
+CLIMATE_SOURCE = "era5_openmeteo"
+
 
 @dataclass(frozen=True)
 class BoundarySummary:
@@ -100,13 +102,76 @@ def fetch_climate(
     settings: Settings, weights: list[CellWeight], *, version: str | None = None
 ) -> ClimateExtract:
     version = version or f"archive-{settings.history_start}_{settings.history_end}"
-    return fetch_daily_tmax(
+    extract = fetch_daily_tmax(
         settings,
         [w.cell for w in weights],
         start=settings.history_start,
         end=settings.history_end,
         version=version,
     )
+    write_climate_pointer(settings, version=version, path=extract.processed_path)
+    return extract
+
+
+def climate_version_dir(settings: Settings, version: str) -> Path:
+    return settings.processed_dir / CLIMATE_SOURCE / version
+
+
+def write_climate_pointer(settings: Settings, *, version: str, path: Path) -> Path:
+    """Record which climate version is current.
+
+    The pointer exists so a downstream stage never has to guess between
+    versions by sorting directory names. It stores the version (portable) and
+    the artifact hash (so a rewritten parquet is detected, not silently used).
+    """
+    target = settings.processed_dir / CLIMATE_SOURCE / "latest.json"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "version": version,
+        "artifact": f"{CLIMATE_SOURCE}/{version}/daily_tmax.parquet",
+        "sha256": sha256_file(path),
+        "written_at": now_utc().isoformat(),
+    }
+    target.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+    return target
+
+
+def resolve_climate_path(settings: Settings, *, version: str | None = None) -> Path:
+    """Locate the canonical climate parquet: explicit version, else the pointer.
+
+    Never globs for a candidate. Choosing an input by lexicographic directory
+    order is how a pipeline silently uses yesterday's data.
+    """
+    if version is not None:
+        path = climate_version_dir(settings, version) / "daily_tmax.parquet"
+        if not path.exists():
+            raise FileNotFoundError(
+                f"climate version {version!r} not found at {path}; "
+                "run `climate-resilience climate` first or omit --climate-version"
+            )
+        return path
+
+    pointer = settings.processed_dir / CLIMATE_SOURCE / "latest.json"
+    if not pointer.exists():
+        raise FileNotFoundError(
+            f"no climate pointer at {pointer}; run `climate-resilience climate` "
+            "(or `climate-resilience data`) before building the mart"
+        )
+
+    payload = json.loads(pointer.read_text(encoding="utf-8"))
+    path = settings.processed_dir / str(payload["artifact"])
+    if not path.exists():
+        raise FileNotFoundError(
+            f"climate pointer refers to a missing artifact: {path}; re-run the climate stage"
+        )
+    recorded = str(payload.get("sha256", ""))
+    actual = sha256_file(path)
+    if recorded and recorded != actual:
+        raise RuntimeError(
+            f"climate parquet {path} changed since the pointer was written "
+            f"({recorded[:12]}… -> {actual[:12]}…); re-run the climate stage"
+        )
+    return path
 
 
 def build_mart(
@@ -114,6 +179,7 @@ def build_mart(
     *,
     indicator_id: str = "hot_days_tmax_ge_35c",
     threshold: float | None = None,
+    climate_version: str | None = None,
 ) -> BuildSummary:
     spec = get_indicator(indicator_id)
     threshold = spec.default_threshold if threshold is None else threshold
@@ -122,13 +188,7 @@ def build_mart(
 
     municipality = load_or_fetch_municipality(settings)
 
-    climate_dir = settings.processed_dir / "era5_openmeteo"
-    candidates = sorted(climate_dir.glob("*/daily_tmax.parquet"))
-    if not candidates:
-        raise FileNotFoundError(
-            "no processed climate data found; run the climate stage first"
-        )
-    climate_path = candidates[-1]
+    climate_path = resolve_climate_path(settings, version=climate_version)
     frame = pd.read_parquet(climate_path)
     weight_index = weights_from_frame(frame, municipality, settings.era5_cell_deg)
 
@@ -141,6 +201,7 @@ def build_mart(
             "min_coverage": settings.min_coverage,
             "cell_deg": settings.era5_cell_deg,
             "municipality": settings.municipality,
+            "climate_version": climate_path.parent.name,
         },
     )
     recorder.add_input(climate_path)

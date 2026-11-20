@@ -22,7 +22,26 @@ that is not true, CI fails.
 | `units`, `crs`, `native_resolution` | Required before any join is permitted |
 | `spatial_coverage`, `temporal_coverage`, `time_basis` | What the data does and does not cover |
 | `status` | `active`, `blocked`, `not_implemented`, `planned`, `context_only` |
+| `artifact` | Path to the acquired file, relative to the data directory |
+| `required` | `true` when a published indicator cannot be produced without it |
 | `known_gaps` | Stated limitations, not a wish list |
+
+`checksum` is the sha256 of `artifact`, so `make verify` can compare what is on
+disk with what the catalogue claims. An evidence envelope may pin a different
+scope for the same dataset — climate envelopes pin the combined raw payload
+checksum, for example — and that is recorded per row rather than assumed.
+
+## Acquisition
+
+`make data` reads this catalogue and runs every dataset that has an adapter, in
+dependency order. A `required` dataset that fails exits non-zero; an optional
+one is recorded as `skipped`. Each run writes
+`data/manifests/data-<run_id>.json` with per-source status, artifact and
+checksum. `make data-offline` checks the cache with no network access.
+
+A dataset whose adapter does not exist yet cannot be acquired, and a `required`
+one fails the run rather than disappearing quietly. That is deliberate: a
+requirement that is not implemented should be a visible failure, not a gap.
 
 ## Qualification gates
 

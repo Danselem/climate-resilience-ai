@@ -63,34 +63,68 @@ code problem.
 ```bash
 uv sync --all-groups
 
-uv run climate-resilience boundaries   # municipal polygon -> data/raw, data/processed
-uv run climate-resilience wards        # 110 ward polygons, validated + crosswalk
-uv run climate-resilience climate      # ERA5-derived daily Tmax for intersecting cells
-uv run climate-resilience mart         # build indicator rows + manifest + snapshot
-uv run climate-resilience show --scope-level municipality --limit 10
-
-uv run python scripts/independent_check.py   # independent recount of every cell-year
+make data      # acquire every source, then build the mart (one command)
+make verify    # catalogue + artifact checksums + independent recount
 ```
 
-Or `make boundaries wards climate mart verify`.
+`make data` downloads into `data/raw`, builds `data/processed`, and writes the
+mart. Stages reuse cached raw inputs, so a second run does no network I/O.
+
+Individual stages remain available when you are debugging one of them:
+
+```bash
+uv run climate-resilience boundaries   # municipal polygon
+uv run climate-resilience wards        # 110 ward polygons, validated + crosswalk
+uv run climate-resilience climate      # ERA5-derived daily Tmax
+uv run climate-resilience mart         # indicator rows + manifest + snapshot
+uv run climate-resilience show --scope-level municipality --limit 10
+```
+
+No network? `make data-offline` verifies the cached artifacts against their
+catalogue checksums and performs no fetch.
 
 Run `uv run climate-resilience --help` for all commands.
+
+## One command, and what it promises
+
+`make data` runs `boundaries → wards → climate → mart` in dependency order. Each
+source is isolated: a blocked optional source is recorded as `skipped`, while a
+failure in a source marked `required` in the catalogue exits non-zero and skips
+the build.
+
+Every run writes `data/manifests/data-<run_id>.json`:
+
+```
+  ok   geoboundaries_zaf_adm2   eThekwini: 2,556.6 km², vintage 2020
+  ok   geoboundaries_zaf_adm4   110 wards, 110 crosswalk rows, 0 repaired
+  ok   era5_openmeteo           82,185 rows across 5 cells, 1980-01-01..2024-12-31
+  ok   mart build               270 mart rows
+```
+
+After each stage the declared artifact is hashed and compared with the
+catalogue, so "the step ran" and "the expected file is on disk" are separate
+claims. The mart reads its climate input through a recorded pointer
+(`data/processed/era5_openmeteo/latest.json`), never by sorting directory names.
 
 ## Quality gates
 
 ```bash
 uv run ruff check .
 uv run pytest
-uv run climate-resilience catalogue
+make verify          # catalogue checksums + independent recount
+make data-offline    # no-network cache check
 ```
 
 CI runs lint, tests and catalogue validation. Live downloads are run manually
 because they depend on external services; their manifests are the evidence.
+The acquisition orchestration itself is tested with fake runners, so a broken
+stage order or failure policy fails CI without a 150 MB download.
 
 ## How it is built
 
 | Layer | Purpose |
 |---|---|
+| `acquire.py` | One-command acquisition: order, isolation, required/optional |
 | `ingestion/` | One adapter per source, each declaring licence and vintage |
 | `spatial.py` | CRS policy: store EPSG:4326, compute in EPSG:32736 |
 | `spatial_validation.py` | Boundary gates: validity, containment, overlap, area |
@@ -101,7 +135,7 @@ because they depend on external services; their manifests are the evidence.
 | `envelope.py` | The contract that makes traceability enforceable |
 | `manifest.py` | Input/output hashing and run records |
 
-Three decisions shape everything else, and each has an ADR:
+Four decisions shape everything else, and each has an ADR:
 
 1. **Precompute into a mart** ([ADR-001](docs/adr/001-precomputed-indicator-mart.md)) —
    no raster work at request time.
@@ -110,6 +144,9 @@ Three decisions shape everything else, and each has an ADR:
    out of the data model.
 3. **Failed data gates are recorded, not worked around**
    ([ADR-006](docs/adr/006-phase1-source-substitution.md)).
+4. **One command acquires, and sources fail independently**
+   ([ADR-007](docs/adr/007-one-command-acquisition.md)) — a blocked source is
+   reported, not silently dropped or allowed to abort the run.
 
 ## Reproducibility
 

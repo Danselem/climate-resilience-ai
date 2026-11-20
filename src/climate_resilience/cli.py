@@ -12,6 +12,7 @@ import json
 
 import typer
 
+from . import acquire
 from . import catalogue as catalogue_module
 from .config import get_settings
 from .indicators import REGISTRY
@@ -86,10 +87,18 @@ def climate() -> None:
 def mart(
     indicator: str = typer.Option("hot_days_tmax_ge_35c", help="Registered indicator id"),
     threshold: float | None = typer.Option(None, help="Override the default threshold"),
+    climate_version: str | None = typer.Option(
+        None, help="Climate version to use; default is the recorded pointer"
+    ),
 ) -> None:
     """Build the indicator mart from canonical inputs."""
     settings = get_settings()
-    summary = build_mart(settings, indicator_id=indicator, threshold=threshold)
+    summary = build_mart(
+        settings,
+        indicator_id=indicator,
+        threshold=threshold,
+        climate_version=climate_version,
+    )
     typer.echo(f"run_id        : {summary.run_id}")
     typer.echo(f"rows          : {summary.rows}")
     typer.echo(f"content_hash  : {summary.content_hash}")
@@ -99,6 +108,71 @@ def mart(
         f"municipality  : {summary.municipality.name} "
         f"({summary.municipality.area_km2:,.1f} km²)"
     )
+
+
+@app.command()
+def data(
+    offline: bool = typer.Option(
+        False, "--offline", help="Verify cached artifacts only; no network access"
+    ),
+) -> None:
+    """Acquire every catalogued source, then build the mart.
+
+    Required sources must succeed; optional ones are recorded as skipped. The
+    run always writes data/manifests/data-<run_id>.json.
+    """
+    settings = get_settings()
+    try:
+        report = acquire.run_data(settings, offline=offline)
+    except ValueError as exc:
+        typer.echo(f"cannot run: {exc}")
+        raise typer.Exit(code=1) from exc
+
+    typer.echo(f"run_id        : {report.run_id}")
+    typer.echo(f"mode          : {'offline (no network)' if offline else 'live'}")
+    typer.echo("")
+    for source in report.sources:
+        mark = {"ok": "ok  ", "failed": "FAIL", "skipped": "skip"}[source.status]
+        typer.echo(
+            f"  {mark} {source.dataset_id:<24} {source.detail} "
+            f"({source.seconds:.1f}s)"
+        )
+    build = report.build
+    mark = {"ok": "ok  ", "failed": "FAIL", "skipped": "skip"}[build.status]
+    typer.echo(f"  {mark} mart build               {build.detail}")
+    if build.content_hash:
+        typer.echo(f"       content_hash             {build.content_hash}")
+    typer.echo(f"\nreport        : data-{report.run_id}.json")
+
+    if not report.ok:
+        typer.echo("")
+        for source in report.failed_required:
+            typer.echo(f"required source failed: {source.dataset_id}: {source.detail}")
+        if build.status == "failed":
+            typer.echo(f"build failed: {build.detail}")
+        raise typer.Exit(code=1)
+    typer.echo("\nall required sources acquired")
+
+
+@app.command()
+def verify() -> None:
+    """Check catalogue coherence and that every active artifact matches its checksum."""
+    settings = get_settings()
+    path = settings.catalogue_dir / "datasets.json"
+    parsed = catalogue_module.load(path)
+    problems = catalogue_module.validate(parsed)
+    for entry in parsed.datasets:
+        if entry.status == "active":
+            typer.echo(f"active {entry.id:<24} {entry.checksum[:12] if entry.checksum else '-'}")
+    for dataset_id, problem in acquire.verify_artifacts(settings):
+        problems.append(f"{dataset_id}: {problem}")
+
+    if problems:
+        typer.echo("")
+        for problem in problems:
+            typer.echo(f"problem: {problem}")
+        raise typer.Exit(code=1)
+    typer.echo("\nartifacts match catalogue checksums")
 
 
 @app.command()

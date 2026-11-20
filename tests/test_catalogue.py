@@ -44,3 +44,32 @@ def test_planned_datasets_are_not_marked_active() -> None:
     planned = {entry.id for entry in parsed.by_status("planned")}
     active = {entry.id for entry in parsed.by_status("active")}
     assert not planned & active
+
+
+def test_every_active_dataset_is_acquirable() -> None:
+    parsed = load(CATALOGUE)
+    for entry in parsed.by_status("active"):
+        assert entry.artifact, f"{entry.id} is active but names no artifact"
+        assert entry.required, f"{entry.id} is active but not marked required"
+
+
+def test_required_datasets_are_never_merely_planned() -> None:
+    from climate_resilience.catalogue import DatasetEntry, validate
+
+    parsed = load(CATALOGUE)
+    blocked = next(entry for entry in parsed.datasets if entry.id == "mdb_wards")
+    promoted = DatasetEntry(**{**blocked.model_dump(), "required": True})
+    problems = validate(parsed.model_copy(update={"datasets": [promoted]}))
+    assert any("required dataset is not active" in problem for problem in problems)
+
+
+def test_active_dataset_without_an_artifact_is_a_problem() -> None:
+    from climate_resilience.catalogue import validate
+
+    parsed = load(CATALOGUE)
+    stripped = [
+        entry.model_copy(update={"artifact": None}) if entry.id == "era5_openmeteo" else entry
+        for entry in parsed.datasets
+    ]
+    problems = validate(parsed.model_copy(update={"datasets": stripped}))
+    assert any("no artifact path" in problem for problem in problems)

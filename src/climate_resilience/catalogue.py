@@ -35,6 +35,13 @@ class DatasetEntry(BaseModel):
     time_basis: str
     status: Status
     retrieved_at: date | None = None
+    # Path to the acquired file, relative to the data directory. `checksum` is
+    # the sha256 of this artifact, so a reader can verify what is on disk.
+    artifact: str | None = None
+    # True when a published indicator cannot be produced without this dataset.
+    # A missing optional source is recorded and skipped; a missing required one
+    # fails the run.
+    required: bool = False
     known_gaps: list[str] = Field(default_factory=list)
     processing_steps: list[str] = Field(default_factory=list)
 
@@ -66,4 +73,11 @@ def validate(catalogue: Catalogue) -> list[str]:
             problems.append(f"{entry.id}: active dataset has no retrieval date")
         if not entry.known_gaps and entry.status == "active":
             problems.append(f"{entry.id}: active dataset should record known gaps explicitly")
+        if entry.status == "active" and not entry.artifact:
+            problems.append(f"{entry.id}: active dataset declares no artifact path")
+        if entry.required and entry.status != "active":
+            problems.append(
+                f"{entry.id}: required dataset is not active (status={entry.status}); "
+                "a required source must be acquired, not merely planned"
+            )
     return problems

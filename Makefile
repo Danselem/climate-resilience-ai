@@ -1,4 +1,4 @@
-.PHONY: sync lint format test check boundaries wards climate mart verify clean
+.PHONY: sync lint format test check data data-offline build boundaries wards climate mart verify all clean
 
 sync:
 	uv sync --all-groups
@@ -14,6 +14,19 @@ test:
 
 check: lint test
 
+# One command: acquire every catalogued source, then build the mart.
+# Stages reuse cached raw inputs, so a warm run does no network I/O.
+data:
+	uv run climate-resilience data
+
+# Verify the cache only. No network, no build. Used when offline and in CI.
+data-offline:
+	uv run climate-resilience data --offline
+
+# Rebuild derived outputs from already-acquired inputs.
+build:
+	uv run climate-resilience mart
+
 boundaries:
 	uv run climate-resilience boundaries
 
@@ -27,8 +40,11 @@ mart:
 	uv run climate-resilience mart
 
 verify:
+	uv run climate-resilience verify
 	uv run python scripts/independent_check.py
 	uv run climate-resilience catalogue
+
+all: data verify check
 
 clean:
 	rm -f data/mart.db
