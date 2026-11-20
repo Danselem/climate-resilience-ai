@@ -91,6 +91,13 @@ Three things must be read alongside those numbers:
   because the hydrology is 10 km. This is modelled extent with coarse depth
   classes, not a continuous depth map ([ADR-010](docs/adr/010-flood-hazard-baseline-and-coastal-null.md)).
 
+The ward pattern was checked against current literature. The most exposed wards
+sit on the Umgeni/Springfield reach, the Umlazi–Isipingo–Umhlatuzana system and
+the northern reaches near Tongaat — the same rivers JICA's 2025 Durban survey
+and the Presidential Climate Commission's 2022 flood analysis name, and the
+corridors where Springer (2025) places the highest-risk informal settlements.
+That is a placement check, not a validation of magnitude.
+
 ### Census ward population (Phase 3, not joined)
 
 Census 2022 ward totals are ingested with their official codes: 111 eThekwini

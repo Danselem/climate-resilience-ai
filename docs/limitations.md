@@ -98,11 +98,14 @@ output's `quality.warnings`.
   threshold is therefore "any modelled inundation" rather than the 0.5 m
   default; the deviation from §10.7 is recorded in
   [ADR-010](adr/010-flood-hazard-baseline-and-coastal-null.md).
-- **Coastal flooding is zero, and that is a model result.** Aqueduct v2 shows no
-  coastal inundation for eThekwini at 10, 50 or 100 years, nor at 2080 RCP8.5
-  with median sea-level rise. The same raster inundates Maputo Bay, so the null
-  is a property of the model and this coastline, not a failed download. Coastal
-  rows are published as 0.0 with that warning attached.
+- **Coastal flooding is zero in the model, and zero is a stronger claim than
+  "low".** Aqueduct v2 shows no coastal inundation for eThekwini at 10, 50 or
+  100 years, nor at 2080 RCP8.5 with median sea-level rise. The same raster
+  inundates Maputo Bay, so the null is not a failed download, and JICA's 2025
+  Durban flood survey independently rates coastal storm surge risk as currently
+  low. But the coast does flood: the 2007 surge caused damage, local sea level
+  is rising 2.7 mm/year, and 0.3–1 m is projected by 2100. Absence of modelled
+  inundation at 1 km is not absence of coastal risk.
 - **Extent saturates while depth triples.** Wet cells go 316 → 317 → 317 while
   maximum depth goes 0.163 → 0.365 → 0.466 m between the 10- and 100-year
   events. Area-based exposure barely separates return periods; population
@@ -111,7 +114,10 @@ output's `quality.warnings`.
 - **Ward exposure is highly concentrated.** Of 108 published wards, the median
   riverine area fraction at 100 years is 0.03% and 9 wards exceed 50%; the
   maximum is 83.6%. A single number for "the average ward" would describe almost
-  none of them.
+  none of them. The concentration is consistent with independent accounts: the
+  April 2022 floods affected the Mlazi, Mgeni, Isipingo, Mbokodweni and
+  Umhlatuzana, and the most exposed wards sit on those corridors. That is a
+  placement check, not a validation of magnitude.
 - **Population exposure is an upper bound.** The hazard model reports one depth
   per cell, so everyone in a wet cell is counted as exposed even where water
   would occupy part of it.

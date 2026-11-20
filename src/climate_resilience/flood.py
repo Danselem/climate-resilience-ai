@@ -75,7 +75,9 @@ POPULATION_WARNING = (
 
 COASTAL_NULL_WARNING = (
     "Aqueduct v2 models no coastal inundation for eThekwini at this return period; the "
-    "same raster inundates Maputo Bay, so this is a model result, not a missing download"
+    "same raster inundates Maputo Bay, and JICA's 2025 Durban flood survey also rates "
+    "coastal storm surge risk as currently low, so this is a model result rather than a "
+    "missing download. It does not mean the coast cannot flood"
 )
 
 DEPTH_QUANTISATION_WARNING = (

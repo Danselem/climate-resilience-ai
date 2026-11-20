@@ -56,6 +56,41 @@ Two further facts: the release ships coastal sea-level-rise percentiles 5 and
 and two harbour wards (026, 028) fall where the riverine raster is nodata, so
 their riverine exposure has no input at all.
 
+## Literature check
+
+A model that produces a null needs an external view, so the outputs were
+compared against current published work on eThekwini. The comparison is
+corridor-level, not a validation of magnitude.
+
+- **JICA, Data Collection Survey for Flood Damage Reduction in Durban (2025)**
+  records that the April 2022 floods affected all rivers in the municipality —
+  Mlazi, Mgeni, Isipingo, Mbokodweni and Umhlatuzana — and states that
+  "coastal storm surge risk is currently considered low", while recommending a
+  coastal risk assessment. Low is not zero, but it is consistent with the model
+  producing no coastal inundation at 1 km.
+- **Presidential Climate Commission brief (2023)** reports 18 river courses
+  overflowing, naming the Amanzimtoti, Umbilo and Umgeni, with the worst
+  impacts in riverside communities and informal settlements.
+- **Perfect Storm (Outlier, 2023)** is explicit that April 2022 "was a case of
+  inland river flooding, rather than a coastal storm surge", and records local
+  sea-level rise of 2.7 mm/year with 0.3–1 m projected by 2100.
+- **Springer, *Mapping pluralistic future flood risk scenarios for informal
+  settlements in eThekwini* (2025)** identifies Umlazi, KwaMashu and KwaMakhuta
+  among settlements at extremely high flood risk across all scenarios.
+
+The published pattern matches those corridors. The most exposed wards cluster
+on the Umgeni/Springfield reach around 31.00°E, −29.72 to −29.79 (wards 039,
+034, 046, 048, 054, 025); on the Umlazi, Isipingo and Umhlatuzana system around
+30.94–30.99°E, −29.88 to −29.98 (wards 075, 090, 068, 033, 032); and on the
+northern reaches near Tongaat at 31.15°E, −29.54 (ward 062). Those are the
+rivers the literature names.
+
+What this does and does not establish: the ward pattern is qualitatively
+consistent with independent accounts, which is evidence against a systematic
+placement error. It is not evidence that the magnitudes are right — the
+hydrology is 10 km, the depth field is two-valued, and no damage or defence
+data enters the model.
+
 ## Decision
 
 - **Baseline only.** Riverine `historical`/WATCH and coastal
@@ -68,8 +103,9 @@ their riverine exposure has no input at all.
   misinform the reader: the 0.5 m variant is structurally empty. The deviation
   is recorded rather than quietly applied.
 - **Coastal zero rows are published, carrying a warning that names the Maputo
-  counter-evidence.** A zero that is queryable and labelled is better than an
-  absent row that reads as an omission.
+  counter-evidence and JICA's "currently low" assessment.** A zero that is
+  queryable, corroborated and labelled is better than an absent row that reads
+  as an omission.
 - **Scopes with no hazard input are withheld, not published as zero.** Wards
   026 and 028 have no riverine coverage; their riverine rows are absent from the
   mart and listed in the snapshot's `withheld` field. Publishing `0.0` would
@@ -94,9 +130,11 @@ their riverine exposure has no input at all.
 - Extent saturates while depth triples. Area-based exposure barely separates the
   return periods; that is a property of the source at this resolution, not a bug,
   and it is stated in the README rather than smoothed over.
-- Ward figures vary widely: the most exposed ward is 83.6% inundated, the
-  median much lower. At a 5′ model resolution those are statements about a
-  coarse modelled extent, not about streets.
+- Ward figures vary widely: the most exposed ward is 83.6% inundated and the
+  median ward is 0.03%. At a 5′ model resolution those are statements about a
+  coarse modelled extent, not about streets, and the concentration is consistent
+  with the literature's focus on named river corridors rather than diffuse
+  city-wide flooding.
 - No risk score, ranking or combined index is produced. Riverine and coastal are
   separate axes and are never summed.
 - The GloFAS riverine cross-check named in §10.7 remains unimplemented: it needs
