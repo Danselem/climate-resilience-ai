@@ -35,7 +35,20 @@ HEAT_SPEC = IndicatorSpec(
     citation="ETCCDI warm-day variant; threshold fixed at 35 degC (absolute, not percentile)",
 )
 
-REGISTRY: dict[str, IndicatorSpec] = {HEAT_SPEC.indicator_id: HEAT_SPEC}
+POPULATION_SPEC = IndicatorSpec(
+    indicator_id="population_count_worldpop",
+    hazard_type="none",
+    unit="persons",
+    description="Resident population allocated to a scope from the WorldPop 1 km grid",
+    method_id="worldpop_areal_allocation",
+    method_version="1.0.0",
+    citation="WorldPop 2020 UN-adjusted, 1 km aggregated, CC BY 4.0",
+)
+
+REGISTRY: dict[str, IndicatorSpec] = {
+    HEAT_SPEC.indicator_id: HEAT_SPEC,
+    POPULATION_SPEC.indicator_id: POPULATION_SPEC,
+}
 
 
 def get(indicator_id: str) -> IndicatorSpec:

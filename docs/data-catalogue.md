@@ -50,17 +50,26 @@ units, identifiers, vintage and size have all been checked. A failed gate is
 recorded as `blocked` with the reason — for example `mdb_wards`, which was
 unreachable and remains blocked rather than quietly replaced.
 
-## Status at Phase 2
+## Status at Phase 3
 
 | Status | Datasets |
 |---|---|
-| active | `geoboundaries_zaf_adm2`, `geoboundaries_zaf_adm4`, `era5_openmeteo` |
-| blocked | `mdb_wards` |
+| active | `geoboundaries_zaf_adm2`, `geoboundaries_zaf_adm4`, `era5_openmeteo`, `worldpop`, `census_2022_ward_population` |
+| blocked | `mdb_wards`, `census_2022` |
 | not_implemented | `cds_era5` |
-| planned | `census_2022`, `worldpop`, `aqueduct_floods`, `nccis_projections`, `firms` |
+| planned | `aqueduct_floods`, `nccis_projections`, `firms` |
 | context_only | `greenbook` |
 
 `mdb_wards` stays `blocked` even though ward geometry now exists: the entry
 records the authoritative source, and `geoboundaries_zaf_adm4` records what is
 actually in use. Keeping both makes the substitution visible rather than
 letting the blocked entry quietly disappear.
+
+`census_2022` is split in two deliberately. The full census is `blocked`:
+socio-economic indicators are published only through interactive tools, and
+there is no bulk ward table. `census_2022_ward_population` is `active` because
+the population-only ward product is downloadable and validated — but it is not
+joined to geometry (111 census wards against 110 ADM4 polygons) and no
+published indicator depends on it. `worldpop` is active at 1 km, not the 100 m
+product the specification names, because the 100 m national file cannot be
+subset ([ADR-009](adr/009-exposure-resolution-and-vulnerability-gap.md)).

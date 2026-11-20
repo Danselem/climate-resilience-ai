@@ -47,10 +47,25 @@ def test_planned_datasets_are_not_marked_active() -> None:
 
 
 def test_every_active_dataset_is_acquirable() -> None:
+    from climate_resilience.acquire import STAGE_BY_DATASET
+
     parsed = load(CATALOGUE)
     for entry in parsed.by_status("active"):
         assert entry.artifact, f"{entry.id} is active but names no artifact"
-        assert entry.required, f"{entry.id} is active but not marked required"
+        assert entry.id in STAGE_BY_DATASET, (
+            f"{entry.id} is active but has no acquisition stage"
+        )
+
+
+def test_every_required_dataset_has_an_acquisition_stage() -> None:
+    from climate_resilience.acquire import STAGE_BY_DATASET
+
+    parsed = load(CATALOGUE)
+    for entry in parsed.datasets:
+        if entry.required:
+            assert entry.id in STAGE_BY_DATASET, (
+                f"{entry.id} is required but has no acquisition stage"
+            )
 
 
 def test_required_datasets_are_never_merely_planned() -> None:

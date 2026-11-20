@@ -1,8 +1,9 @@
-"""Independent reference check for `hot_days_tmax_ge_35c`.
+"""Reference checks for the published mart.
 
-Deliberately does not import the project's indicator code. It re-derives the
-count from the raw JSON payloads with plain Python, then compares against the
-published mart. If the two disagree, the mart is wrong.
+The heat check deliberately does not import the project's indicator code: it
+re-derives the count from the raw JSON payloads with plain Python. The exposure
+check verifies the allocation invariant that ward totals sum to the municipal
+total.
 
     uv run python scripts/independent_check.py
 """
@@ -66,6 +67,44 @@ def published_counts() -> dict[tuple[str, int], float]:
     return {(scope_id, int(year)): float(value) for scope_id, year, value in rows}
 
 
+def exposure_check() -> list[str]:
+    """Ward exposure must sum to the municipal total, with 110 wards."""
+    if not DB_PATH.exists():
+        return [f"mart not found at {DB_PATH}"]
+    connection = sqlite3.connect(DB_PATH)
+    try:
+        rows = connection.execute(
+            """
+            select scope_level, count(*), coalesce(sum(value), 0)
+            from indicator_value
+            where indicator_id = 'population_count_worldpop'
+            group by scope_level
+            """
+        ).fetchall()
+    finally:
+        connection.close()
+
+    totals = {level: (int(count), float(total)) for level, count, total in rows}
+    problems: list[str] = []
+    ward_count, ward_total = totals.get("ward", (0, 0.0))
+    metro_count, metro_total = totals.get("municipality", (0, 0.0))
+
+    if ward_count != 110:
+        problems.append(f"expected 110 exposure wards, found {ward_count}")
+    if metro_count != 1:
+        problems.append(f"expected 1 exposure municipality row, found {metro_count}")
+    if abs(ward_total - metro_total) > 1.0:
+        problems.append(
+            f"ward exposure sums to {ward_total:,.1f} but municipality is {metro_total:,.1f}"
+        )
+
+    print(f"exposure wards        : {ward_count}")
+    print(f"exposure ward total   : {ward_total:,.1f}")
+    print(f"exposure municipality : {metro_total:,.1f}")
+    print(f"exposure mismatches   : {len(problems)}")
+    return problems
+
+
 def main() -> int:
     reference = reference_counts()
     published = published_counts()
@@ -91,10 +130,18 @@ def main() -> int:
     for key in extra[:10]:
         print(f"  extra   {key}")
 
-    if mismatched or missing or extra:
+    print("")
+    exposure_problems = exposure_check()
+    for problem in exposure_problems:
+        print(f"  exposure: {problem}")
+
+    if mismatched or missing or extra or exposure_problems:
         print("\nRESULT: FAIL")
         return 1
-    print("\nRESULT: PASS — every published cell-year matches an independent recount")
+    print(
+        "\nRESULT: PASS — heat cell-years match an independent recount; "
+        "exposure wards sum to the municipality"
+    )
     return 0
 
 

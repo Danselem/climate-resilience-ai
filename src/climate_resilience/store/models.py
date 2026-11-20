@@ -50,6 +50,7 @@ indicator_value = Table(
     Column("coverage_pct", Float, nullable=False),
     Column("missing_pct", Float, nullable=False),
     Column("native_resolution", Text, nullable=False),
+    Column("warnings", Text, nullable=False, server_default="[]"),
     Column("dataset_version", Text, nullable=False),
     Column("run_id", Text, nullable=False),
     Column("created_at", DateTime, nullable=False),

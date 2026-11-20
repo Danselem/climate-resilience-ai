@@ -6,8 +6,9 @@ An analytical system, not a chatbot: every number is computed deterministically,
 carries its provenance, and can be reproduced from a recorded manifest. A
 language model may later explain those numbers; it may never calculate them.
 
-**Status: Phase 2 complete.** One indicator end to end on real data, plus a
-validated ward boundary layer and crosswalk. See
+**Status: Phase 3 exposure complete.** Heat and population exposure end to end
+on real data, plus a validated ward boundary layer. Vulnerability is blocked on
+a bulk Census 2022 source and is deliberately not published. See
 [`docs/limitations.md`](docs/limitations.md) before reading any result.
 
 - Specification: [`climate-resilience.md`](climate-resilience.md)
@@ -28,6 +29,37 @@ municipality       1980   0.000    2025   2.701
 
 This is a real heat signal, but it is **not** ward-level: the municipality spans
 five 0.25° grid cells. Read `docs/limitations.md` first.
+
+### Population exposure (Phase 3)
+
+WorldPop 2020 (UN-adjusted, 1 km) clipped to eThekwini and allocated to the 110
+ADM4 wards by each cell's area share.
+
+```bash
+uv run climate-resilience worldpop
+uv run climate-resilience exposure
+```
+
+```
+cells         : 3,654
+population    : 3,766,001
+resolution    : 1 km
+exposure rows : 111 (110 wards + 1 municipality)
+```
+
+Exposure is not risk. These rows answer "where do people live" and carry
+`hazard_type = none`; combining them with a hazard is a separate, explicit
+calculation. The 100 m product is not used because the national file is 609 MB
+and the server does not support range requests
+([ADR-009](docs/adr/009-exposure-resolution-and-vulnerability-gap.md)).
+
+### Census ward population (Phase 3, not joined)
+
+Census 2022 ward totals are ingested with their official codes: 111 eThekwini
+wards, 4,239,901 persons. They are **not** joined to the 110 ADM4 polygons —
+the ward counts differ — and the downloadable product contains population only,
+with no service, tenure or employment variables. Vulnerability is withheld
+rather than guessed.
 
 ### Ward boundary layer (Phase 2)
 
@@ -54,10 +86,10 @@ municipal polygon, pairwise overlap detection, expected ward count, and point
 spot checks including one point that must fall outside. Any error aborts the
 run instead of writing a partial layer.
 
-**Ward geometry does not mean ward-level indicators.** Five 0.25° cells cannot
-distinguish 110 wards; aggregating now would publish 110 copies of 5 values.
-That is the next phase's problem, and it is a data-resolution problem, not a
-code problem.
+**Ward geometry does not mean ward-level heat.** Five 0.25° cells cannot
+distinguish 110 wards; aggregating heat now would publish 110 copies of 5
+values. Population exposure is built separately from WorldPop (Phase 3), which
+does resolve ward differences; heat remains a grid-level product.
 
 ## Quick start
 
@@ -77,7 +109,10 @@ Individual stages remain available when you are debugging one of them:
 uv run climate-resilience boundaries   # municipal polygon
 uv run climate-resilience wards        # 110 ward polygons, validated + crosswalk
 uv run climate-resilience climate      # ERA5-derived daily Tmax
-uv run climate-resilience mart         # indicator rows + manifest + snapshot
+uv run climate-resilience worldpop     # WorldPop 1 km clipped to eThekwini
+uv run climate-resilience census       # Census 2022 ward population (not joined)
+uv run climate-resilience mart         # heat rows + manifest + snapshot
+uv run climate-resilience exposure     # population exposure rows
 uv run climate-resilience show --scope-level municipality --limit 10
 ```
 
@@ -88,10 +123,10 @@ Run `uv run climate-resilience --help` for all commands.
 
 ## One command, and what it promises
 
-`make data` runs `boundaries → wards → climate → mart` in dependency order. Each
-source is isolated: a blocked optional source is recorded as `skipped`, while a
-failure in a source marked `required` in the catalogue exits non-zero and skips
-the build.
+`make data` runs `boundaries → wards → climate → worldpop → census → mart` in
+dependency order. Each source is isolated: a blocked optional source is recorded
+as `skipped`, while a failure in a source marked `required` in the catalogue
+exits non-zero and skips the build.
 
 Every run writes `data/manifests/data-<run_id>.json`:
 
@@ -99,13 +134,16 @@ Every run writes `data/manifests/data-<run_id>.json`:
   ok   geoboundaries_zaf_adm2   eThekwini: 2,556.6 km², vintage 2020
   ok   geoboundaries_zaf_adm4   110 wards, 110 crosswalk rows, 0 repaired
   ok   era5_openmeteo           84,010 rows across 5 cells, 1980-01-01..2025-12-31
-  ok   mart build               276 mart rows
+  ok   worldpop                 3,654 cells, 3,766,001 persons, WorldPop 2020 1 km
+  ok   census_2022_ward_population 111 wards, 4,239,901 persons; not joined
+  ok   mart build               387 mart rows
 ```
 
 After each stage the declared artifact is hashed and compared with the
 catalogue, so "the step ran" and "the expected file is on disk" are separate
-claims. The mart reads its climate input through a recorded pointer
-(`data/processed/era5_openmeteo/latest.json`), never by sorting directory names.
+claims. The mart reads its climate and population inputs through recorded
+pointers (`data/processed/<dataset>/latest.json`), never by sorting directory
+names.
 
 ## Quality gates
 
@@ -132,11 +170,12 @@ stage order or failure policy fails CI without a 150 MB download.
 | `crosswalk.py` | Explicit ward → municipality mapping with vintage |
 | `spot_checks.py` | Known-point placement checks, including one that must miss |
 | `indicators/` | Registered, versioned, deterministic definitions |
+| `exposure.py` | WorldPop → ward and municipality population, separate from hazard |
 | `mart/` | Precomputed rows carrying evidence envelopes |
 | `envelope.py` | The contract that makes traceability enforceable |
 | `manifest.py` | Input/output hashing and run records |
 
-Five decisions shape everything else, and each has an ADR:
+Six decisions shape everything else, and each has an ADR:
 
 1. **Precompute into a mart** ([ADR-001](docs/adr/001-precomputed-indicator-mart.md)) —
    no raster work at request time.
@@ -151,6 +190,10 @@ Five decisions shape everything else, and each has an ADR:
 5. **The analysis window ends at the last complete calendar year**
    ([ADR-008](docs/adr/008-analysis-window-and-revisions.md)) — a partial year
    is withheld, never labelled as a full one.
+6. **Exposure is published at 1 km; vulnerability is withheld**
+   ([ADR-009](docs/adr/009-exposure-resolution-and-vulnerability-gap.md)) — the
+   100 m surface cannot be subset, and census ward indicators are not a bulk
+   product. A gap is reported, not filled with a guess.
 
 ## Reproducibility
 

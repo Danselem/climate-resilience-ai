@@ -6,6 +6,7 @@ at question time. Every row carries the envelope that produced it.
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from datetime import date
 from typing import Any
@@ -197,6 +198,7 @@ def to_row(envelope: EvidenceEnvelope) -> dict[str, Any]:
         "coverage_pct": envelope.quality.coverage_pct,
         "missing_pct": envelope.quality.missing_pct,
         "native_resolution": envelope.quality.native_resolution,
+        "warnings": json.dumps(envelope.quality.warnings, ensure_ascii=False),
         "dataset_version": ",".join(sorted(d.version for d in envelope.datasets)),
         "run_id": envelope.run.run_id,
         "created_at": envelope.run.created_at,

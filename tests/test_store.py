@@ -29,7 +29,6 @@ def test_replace_build_inserts_rows(engine) -> None:
         rows,
         indicator_id="hot_days_tmax_ge_35c",
         method_version="1.0.0",
-        dataset_version=rows[0]["dataset_version"],
     )
     assert inserted == len(rows)
     assert repository.count(engine) == len(rows)
@@ -40,7 +39,6 @@ def test_rebuilding_is_idempotent(engine) -> None:
     kwargs = {
         "indicator_id": "hot_days_tmax_ge_35c",
         "method_version": "1.0.0",
-        "dataset_version": rows[0]["dataset_version"],
     }
     repository.replace_build(engine, rows, **kwargs)
     repository.replace_build(engine, build(frame(), run_id="run-b"), **kwargs)
@@ -55,7 +53,6 @@ def test_fetch_can_filter_by_scope(engine) -> None:
         rows,
         indicator_id="hot_days_tmax_ge_35c",
         method_version="1.0.0",
-        dataset_version=rows[0]["dataset_version"],
     )
 
     metro = repository.fetch(
@@ -75,7 +72,6 @@ def test_fetch_orders_by_period(engine) -> None:
         rows,
         indicator_id="hot_days_tmax_ge_35c",
         method_version="1.0.0",
-        dataset_version=rows[0]["dataset_version"],
     )
     metro = repository.fetch(
         engine, indicator_id="hot_days_tmax_ge_35c", scope_level="municipality"
@@ -89,14 +85,13 @@ def test_row_key_includes_the_dataset_version() -> None:
     assert first["row_key"] != second["row_key"]
 
 
-def test_a_different_dataset_version_is_kept_separately(engine) -> None:
+def test_a_new_dataset_version_replaces_the_live_rows(engine) -> None:
     first = build(frame(), dataset_version="v1")
     repository.replace_build(
         engine,
         first,
         indicator_id="hot_days_tmax_ge_35c",
         method_version="1.0.0",
-        dataset_version="v1",
     )
     second = build(frame(), dataset_version="v2")
     repository.replace_build(
@@ -104,9 +99,10 @@ def test_a_different_dataset_version_is_kept_separately(engine) -> None:
         second,
         indicator_id="hot_days_tmax_ge_35c",
         method_version="1.0.0",
-        dataset_version="v2",
     )
-    assert repository.count(engine) == len(first) + len(second)
+    assert repository.count(engine) == len(second), (
+        "a new input version supersedes the live rows; stale duplicates are not kept"
+    )
 
 
 def municipality(tmp_path: Path) -> Municipality:

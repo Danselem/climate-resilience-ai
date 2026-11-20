@@ -15,7 +15,10 @@ import typer
 from . import acquire
 from . import catalogue as catalogue_module
 from .config import get_settings
+from .exposure import build_exposure
 from .indicators import REGISTRY
+from .ingestion.census import fetch_census_ward_population
+from .ingestion.worldpop import fetch_worldpop
 from .pipeline import (
     build_boundary_layer,
     build_mart,
@@ -81,6 +84,40 @@ def climate() -> None:
     typer.echo(f"date range    : {frame['date'].min()} .. {frame['date'].max()}")
     typer.echo(f"missing tmax  : {int(frame['tmax_c'].isna().sum()):,}")
     typer.echo(f"processed     : {extract.processed_path}")
+
+
+@app.command()
+def worldpop() -> None:
+    """Clip the WorldPop 1 km grid to the municipality."""
+    settings = get_settings()
+    municipality = load_or_fetch_municipality(settings)
+    extract = fetch_worldpop(settings, municipality)
+    typer.echo(f"cells         : {len(extract.grid):,}")
+    typer.echo(f"population    : {float(extract.grid['population'].sum()):,.0f}")
+    typer.echo("resolution    : 1 km (WorldPop 2020, UN-adjusted)")
+    typer.echo(f"processed     : {extract.processed_path}")
+
+
+@app.command()
+def census() -> None:
+    """Fetch the Census 2022 ward population table (population only)."""
+    settings = get_settings()
+    extract = fetch_census_ward_population(settings)
+    typer.echo(f"wards         : {extract.summary['ward_count']}")
+    typer.echo(f"population    : {float(extract.summary['population_total']):,.0f}")
+    typer.echo(f"processed     : {extract.processed_path}")
+    typer.echo("note          : 111 census wards vs 110 boundary wards; not joined")
+
+
+@app.command()
+def exposure() -> None:
+    """Build ward and municipality population exposure from WorldPop."""
+    settings = get_settings()
+    summary = build_exposure(settings)
+    typer.echo(f"run_id        : {summary.run_id}")
+    typer.echo(f"rows          : {summary.rows}")
+    typer.echo(f"content_hash  : {summary.content_hash}")
+    typer.echo(f"snapshot      : {summary.snapshot_path}")
 
 
 @app.command()

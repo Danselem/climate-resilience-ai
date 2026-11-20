@@ -265,7 +265,6 @@ def build_mart(
         rows,
         indicator_id=indicator_id,
         method_version=spec.method_version,
-        dataset_version=rows[0]["dataset_version"],
     )
 
     manifest = recorder.finish()

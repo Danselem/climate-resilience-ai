@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import time
 from collections.abc import Callable
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Literal
@@ -27,6 +28,9 @@ from pydantic import BaseModel, Field
 from . import catalogue as catalogue_module
 from .config import Settings
 from .envelope import now_utc
+from .exposure import build_exposure
+from .ingestion.census import fetch_census_ward_population
+from .ingestion.worldpop import fetch_worldpop
 from .manifest import git_commit, package_versions, sha256_file, sha256_obj
 from .pipeline import (
     build_boundary_layer,
@@ -44,11 +48,43 @@ STAGE_BY_DATASET: dict[str, str] = {
     "geoboundaries_zaf_adm2": "boundaries",
     "geoboundaries_zaf_adm4": "wards",
     "era5_openmeteo": "climate",
+    "worldpop": "worldpop",
+    "census_2022_ward_population": "census",
 }
 
 # Execution order, not catalogue order: geometry before the grid it weights,
 # and everything before the mart.
-STAGE_ORDER: tuple[str, ...] = ("boundaries", "wards", "climate")
+STAGE_ORDER: tuple[str, ...] = (
+    "boundaries",
+    "wards",
+    "climate",
+    "worldpop",
+    "census",
+)
+
+
+@dataclass(frozen=True)
+class PipelineSummary:
+    """Combined result of the heat mart and the exposure build."""
+
+    rows: int
+    content_hash: str
+    heat_rows: int
+    exposure_rows: int
+
+
+def build_all(settings: Settings) -> PipelineSummary:
+    heat = build_mart(settings)
+    exposure = build_exposure(settings)
+    return PipelineSummary(
+        rows=heat.rows + exposure.rows,
+        content_hash=sha256_obj(
+            {"heat": heat.content_hash, "exposure": exposure.content_hash}
+        ),
+        heat_rows=heat.rows,
+        exposure_rows=exposure.rows,
+    )
+
 
 
 class SourceResult(BaseModel):
@@ -117,10 +153,32 @@ def _run_climate(settings: Settings) -> str:
     )
 
 
+def _run_worldpop(settings: Settings) -> str:
+    municipality = load_or_fetch_municipality(settings)
+    extract = fetch_worldpop(settings, municipality)
+    return (
+        f"{len(extract.grid):,} cells, "
+        f"{float(extract.grid['population'].sum()):,.0f} persons, "
+        "WorldPop 2020 1 km"
+    )
+
+
+def _run_census(settings: Settings) -> str:
+    extract = fetch_census_ward_population(settings)
+    summary = extract.summary
+    return (
+        f"{summary['ward_count']} eThekwini wards, "
+        f"{float(summary['population_total']):,.0f} persons; "
+        "not joined to geometry (census 111 vs boundary 110)"
+    )
+
+
 STAGE_RUNNERS: dict[str, Callable[[Settings], str]] = {
     "boundaries": _run_boundaries,
     "wards": _run_wards,
     "climate": _run_climate,
+    "worldpop": _run_worldpop,
+    "census": _run_census,
 }
 
 
@@ -182,7 +240,7 @@ def run_data(
                 )
             )
 
-    build = _build(settings, sources, offline=offline, builder=builder or build_mart)
+    build = _build(settings, sources, offline=offline, builder=builder or build_all)
     report = DataReport(
         run_id=run_id,
         git_commit=git_commit(),

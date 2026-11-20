@@ -28,13 +28,15 @@ def replace_build(
     *,
     indicator_id: str,
     method_version: str,
-    dataset_version: str,
 ) -> int:
-    """Replace all rows for one indicator build, atomically.
+    """Replace all live rows for one indicator/method pair, atomically.
 
     Rebuilding is explicit and idempotent: the previous build of the same
-    indicator/method/dataset is removed, so a partial write cannot leave two
-    versions of the same number in the mart.
+    indicator and method is removed, whatever dataset version produced it.
+    Scoping the delete by ``dataset_version`` would leave stale rows behind
+    whenever the input version changed -- exactly the case where two versions
+    of the same number must not both be live. Old results stay interpretable
+    through their immutable snapshots and manifests, not as duplicate mart rows.
     """
     if not rows:
         return 0
@@ -43,7 +45,6 @@ def replace_build(
             delete(indicator_value).where(
                 indicator_value.c.indicator_id == indicator_id,
                 indicator_value.c.method_version == method_version,
-                indicator_value.c.dataset_version == dataset_version,
             )
         )
         conn.execute(indicator_value.insert(), rows)
