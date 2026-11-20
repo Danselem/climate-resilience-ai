@@ -175,7 +175,7 @@ def test_an_unconfigured_system_uses_the_default_pair(monkeypatch) -> None:
 
     assert model_candidates() == [
         "openrouter:particle-ai/particle-1:free",
-        "openrouter:openai/gpt-oss-20b",
+        "openrouter:z-ai/glm-5.3-flash",
     ]
 
 

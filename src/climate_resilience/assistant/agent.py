@@ -49,7 +49,12 @@ MAX_TOOL_CALLS = 3
 # A free endpoint first, because it is free and it works; a cheap paid model
 # second, because free endpoints disappear without notice. Both are OpenRouter
 # ids and both are priced at run time.
-DEFAULT_MODELS = ("particle-ai/particle-1:free", "openai/gpt-oss-20b")
+#
+# Both were verified to finish within the two-request budget. That is not a
+# property of price: mistral-nemo and nova-micro both implement tool calls and
+# both still needed a third round, and gpt-oss-20b refused to call a tool at
+# all. Model choice for this agent has to be tested, not inferred.
+DEFAULT_MODELS = ("particle-ai/particle-1:free", "z-ai/glm-5.3-flash")
 
 FLOOD_CAVEAT = (
     "Caveat: riverine and coastal flooding only. Pluvial (surface-water) "

@@ -140,16 +140,17 @@ the whole mart into the prompt.
 Models are a fallback chain, because free endpoints rate-limit without notice:
 
 ```
-LLM_MODELS=particle-ai/particle-1:free,openai/gpt-oss-20b
+LLM_MODELS=particle-ai/particle-1:free,z-ai/glm-5.3-flash
 ```
 
 **Measured on `particle-ai/particle-1:free`, 20 Nov 2026:**
 
-| Question | Requests | Latency | Tokens in/out | Cost |
-|---|---|---|---|---|
-| 100-year riverine exposure by ward | 2 | **10.7 s** | 8,939 / 1,054 | $0 |
-| What the CAP says about sea level rise | 2 | **18.1 s** | 6,564 / 936 | $0 |
-| 2050 dry-spell projection (refused) | 0 | 0.0 s | 0 / 0 | $0 |
+| Question | Model | Requests | Latency | Tokens in/out | Cost |
+|---|---|---|---|---|---|
+| 100-year riverine exposure by ward | particle-1:free | 2 | **10.7 s** | 8,939 / 1,054 | $0 |
+| same question | glm-5.3-flash | 2 | **16.6 s** | 8,390 / 1,321 | $0.00044 |
+| What the CAP says about sea level rise | particle-1:free | 2 | **18.1 s** | 6,564 / 936 | $0 |
+| 2050 dry-spell projection (refused) | — | 0 | 0.0 s | 0 / 0 | $0 |
 
 The answers were correct and correctly caveated, and the model distinguished
 document statements from measured values without being told twice. **The 6 s

@@ -98,6 +98,16 @@ output's `quality.warnings`.
   That is the first thing to trim if latency matters more than per-row detail.
 - **Tool-selection accuracy is not measured.** Two questions were checked by
   hand; the gold set does not exist yet.
+- **The two-request budget is not universally satisfiable.** Some models
+  implement tool calls correctly and still need a third round to emit the
+  structured `final_result`; those runs end as `UsageLimitExceeded`. Both
+  defaults were verified to finish in two requests, but any new model has to be
+  tested for that specifically. `gpt-oss-20b` refused to call a tool at all;
+  `mistral-nemo` and `nova-micro` both needed a third request.
+- **8.4k input tokens per question is the latency driver, not just the
+  endpoint.** Most of it is per-row detail — licences and warning lists
+  repeated on every measurement. Trimming that is the first optimisation, and
+  it has not been done.
 - **The guard is keyword-based.** It refuses pluvial and unmeasured-dataset
   questions before any model call. A phrasing it misses still reaches tools that
   cannot answer it, so the failure mode is a slower refusal rather than a wrong

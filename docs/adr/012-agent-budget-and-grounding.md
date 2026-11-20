@@ -43,6 +43,24 @@ are enforced by the runtime, not requested in a prompt.
   `OPENROUTER_API_KEY` the assistant says so and makes zero requests, which is
   a more useful failure than a stack trace at the CLI.
 
+## Measured
+
+Run against `particle-ai/particle-1:free`, twenty questions in: the budget
+holds, the citation contract holds, and the 6 s p95 target does **not**. Two
+sequential calls over ~8.4k tokens cost 10-18 s on the free tier and 16.6 s on
+a cheap paid model.
+
+Two findings changed the configuration:
+
+- The two-request budget is not a property of model quality but of model
+  behaviour. `mistral-nemo` and `nova-micro` both call tools correctly and both
+  still need a third round to emit the structured answer; `gpt-oss-20b` refused
+  to call a tool at all. Both defaults are now models that were *observed* to
+  finish in two requests.
+- Input tokens dominate. Per-row licences and warning lists are repeated on
+  every measurement, which is most of the 8.4k. Trimming the payload is the
+  first latency lever, ahead of changing models.
+
 ## Consequences
 
 - Offline tests exercise the whole orchestration with `FunctionModel`: tool
