@@ -122,6 +122,39 @@ possible without a second managed service.
 SHA of both is the same by construction, which is what makes local/AWS parity a
 fact rather than an intention.
 
+## The image
+
+The first build was **33 GB**. Two causes, both found by building it rather than
+reading the Dockerfile:
+
+- `sentence-transformers` pulled CUDA wheels for a CPU-only deployment — 4.4 GB
+  of `nvidia-*` packages. `torch` is now a direct dependency resolved from the
+  PyTorch CPU index on Linux, and from PyPI elsewhere so a developer's machine
+  is unaffected.
+- `chown -R /app` after installing duplicated every file into a new layer
+  (2.4 GB), and the uv cache was left inside the image (2 GB). Files are now
+  copied with `--chown` and uv runs with `--no-cache`.
+
+```
+33.2 GB  →  8.96 GB  →  3.38 GB
+```
+
+3.4 GB still takes time to pull on a cold Fargate task. The pull time has not
+been measured; the first task start will be slower than the 2-4 s warm latency
+measured locally.
+
+The image was then exercised end to end against the local Postgres:
+
+```
+crp-app:lean --help                                  # CLI starts
+crp-app:lean serve  → /health {"mart_rows":1707}     # API reads the mart
+crp-app:lean report → data/reports/<job>.pdf         # Pango works, job table works
+```
+
+That last check found a defect Terraform would not have: the report job table
+used SQLite's `datetime('now')`, so the first report in AWS would have failed.
+It is now a passed parameter, and a Postgres-backed test covers it.
+
 ## Estimated cost
 
 | Item | Monthly |

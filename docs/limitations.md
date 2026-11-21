@@ -146,6 +146,9 @@ output's `quality.warnings`.
 
 ## Deployment
 
+- **The image is 3.4 GB** after removing CUDA wheels, a duplicate `chown`
+  layer and the uv cache; the first build was 33 GB. Cold-start pull time on
+  Fargate is unmeasured.
 - **The Terraform has never been applied.** It passes `terraform validate` and
   is written against the provider versions named in `versions.tf`, but no VPC
   has been created, no task has started and no smoke test has run. Treat it as a
