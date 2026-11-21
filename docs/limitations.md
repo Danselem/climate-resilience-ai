@@ -144,6 +144,21 @@ output's `quality.warnings`.
   ambiguous names. A typo becomes a `LookupError` rather than a report, which is
   correct, but there is no preview of which scope was chosen before rendering.
 
+## Interface
+
+- **Streamlit's DOM is styled by injected CSS**, which is version-sensitive. It
+  is pinned in `pyproject.toml`, and if a Streamlit upgrade changes its markup
+  the sheet degrades to a plainer page rather than breaking.
+- **No saved views or deep links.** The selected scope and view live in session
+  state, so a planner cannot send a colleague a link to a ward.
+- **The map has no basemap and no extent overlay.** It shows ward boundaries
+  filled by the chosen indicator. There is no street context, and the flood
+  layer is not drawn as geometry because only ward summaries are published.
+- **Ward-level heat is absent by design**, and the interface says so rather than
+  interpolating from five grid cells.
+- **No mobile layout beyond stacking.** The audience uses laptops; the sheet is
+  not designed for a phone.
+
 ## API
 
 - **No rate limiting and no TLS.** `CRP_API_KEY` gates access, but a token

@@ -1,0 +1,14 @@
+[theme]
+# The interface is a sheet of evidence, not a dashboard: same paper, same ink,
+# and no accent colour competing with the one that means "qualified".
+primaryColor = "#15191B"
+backgroundColor = "#F6F7F4"
+secondaryBackgroundColor = "#EDEFEA"
+textColor = "#15191B"
+font = "sans serif"
+
+[server]
+headless = true
+
+[browser]
+gatherUsageStats = false

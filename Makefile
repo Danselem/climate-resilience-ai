@@ -1,4 +1,4 @@
-.PHONY: sync lint format test check data data-offline build boundaries wards climate mart verify all clean api bench report worker
+.PHONY: sync lint format test check data data-offline build boundaries wards climate mart verify all clean api ui bench report worker
 
 sync:
 	uv sync --all-groups
@@ -38,6 +38,9 @@ climate:
 
 mart:
 	uv run climate-resilience mart
+
+ui:
+	uv run streamlit run src/climate_resilience/ui/run.py --server.port 8501
 
 api:
 	uv run climate-resilience serve --port 8000

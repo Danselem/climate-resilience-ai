@@ -19,7 +19,7 @@ from contextlib import asynccontextmanager
 from typing import Annotated, Literal
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import Engine
 
@@ -41,6 +41,13 @@ Mechanism = Literal["riverine", "coastal"]
 class AskRequest(BaseModel):
     question: str = Field(min_length=3, max_length=1000)
     model: str | None = None
+
+
+class ReportRequest(BaseModel):
+    scope_id: str = Field(min_length=2)
+    # Rendering inline keeps the pilot to one process. The queue exists for the
+    # worker path and for SQS; nothing in the UI depends on which is used.
+    process_now: bool = True
 
 
 def create_app(
@@ -164,7 +171,7 @@ def create_app(
     def rank(
         indicator_id: str,
         engine: Annotated[Engine, Depends(current_engine)],
-        limit: Annotated[int, Query(ge=1, le=50)] = 10,
+        limit: Annotated[int, Query(ge=1, le=200)] = 10,
         order: Annotated[Literal["asc", "desc"], Query()] = "desc",
         scope_level: Annotated[Literal["ward", "municipality"], Query()] = "ward",
         mechanism: Annotated[Mechanism | None, Query()] = None,
@@ -214,6 +221,64 @@ def create_app(
         engine: Engine = request.app.state.engine
         deps = ToolDeps(engine=engine, search=request.app.state.search)
         return ask(request.app.state.settings, body.question, model=body.model, deps=deps)
+
+    @app.post("/reports", status_code=201, tags=["reports"], dependencies=guard)
+    def request_report(
+        request: Request, body: ReportRequest
+    ) -> dict[str, object]:
+        """Queue a PDF report for a scope, optionally rendering it now."""
+        from ..reports import RendererUnavailable, claim, enqueue, fail, finish, process
+
+        engine: Engine = request.app.state.engine
+        job_id = enqueue(engine, body.scope_id)
+        if not body.process_now:
+            return {"job_id": job_id, "status": "queued"}
+        job = claim(engine)
+        if job is None:
+            raise HTTPException(status_code=409, detail="queue is empty after enqueue")
+        try:
+            path = process(engine, request.app.state.settings, job)
+        except RendererUnavailable as exc:
+            fail(engine, job.job_id, str(exc))
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+        except LookupError as exc:
+            fail(engine, job.job_id, str(exc))
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        finish(engine, job.job_id, path)
+        return {"job_id": job.job_id, "status": "done", "artifact": str(path)}
+
+    @app.get("/reports/{job_id}", tags=["reports"], dependencies=guard)
+    def report_status(request: Request, job_id: str) -> dict[str, object]:
+        from sqlalchemy import text
+
+        engine: Engine = request.app.state.engine
+        with engine.connect() as connection:
+            row = connection.execute(
+                text(
+                    "select job_id, scope_id, status, artifact, error, requested_at, "
+                    "finished_at from report_job where job_id = :job_id"
+                ),
+                {"job_id": job_id},
+            ).first()
+        if row is None:
+            raise HTTPException(status_code=404, detail="no such report job")
+        return dict(row._mapping)
+
+    @app.get("/reports/{job_id}/file", tags=["reports"], dependencies=guard)
+    def report_file(request: Request, job_id: str) -> FileResponse:
+        from pathlib import Path
+
+        from sqlalchemy import text
+
+        engine: Engine = request.app.state.engine
+        with engine.connect() as connection:
+            row = connection.execute(
+                text("select artifact from report_job where job_id = :job_id"),
+                {"job_id": job_id},
+            ).first()
+        if row is None or not row[0] or not Path(row[0]).exists():
+            raise HTTPException(status_code=404, detail="report is not ready")
+        return FileResponse(row[0], media_type="application/pdf", filename=f"{job_id}.pdf")
 
     @app.exception_handler(Exception)
     async def unhandled(request: Request, exc: Exception) -> JSONResponse:

@@ -208,3 +208,37 @@ def test_the_ask_endpoint_refuses_pluvial_at_zero_cost(client: TestClient) -> No
 
     assert body["refused_by_guard"] is True
     assert body["requests"] == 0
+
+
+def test_a_report_can_be_requested_and_downloaded(client: TestClient) -> None:
+    response = client.post(
+        "/reports", json={"scope_id": "ethekwini", "process_now": True}
+    )
+
+    if response.status_code == 503:
+        # No PDF engine here; the API must say so, not return an empty file.
+        assert "pango" in response.json()["detail"].lower()
+        return
+    assert response.status_code == 201
+    job = response.json()
+    assert job["status"] == "done"
+
+    status_response = client.get(f"/reports/{job['job_id']}")
+    artifact = client.get(f"/reports/{job['job_id']}/file")
+
+    assert status_response.json()["status"] == "done"
+    assert artifact.status_code == 200
+    assert artifact.content.startswith(b"%PDF")
+
+
+def test_an_unknown_scope_produces_a_failed_job_not_a_broken_report(
+    client: TestClient,
+) -> None:
+    response = client.post("/reports", json={"scope_id": "Atlantis"})
+
+    assert response.status_code == 404
+
+
+def test_an_unknown_job_is_a_404(client: TestClient) -> None:
+    assert client.get("/reports/nope").status_code == 404
+    assert client.get("/reports/nope/file").status_code == 404

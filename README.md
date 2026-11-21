@@ -374,6 +374,36 @@ DYLD_FALLBACK_LIBRARY_PATH=/opt/homebrew/lib uv run climate-resilience report --
 Without it the command fails with a message that names the fix, not a dlopen
 traceback.
 
+### Interface
+
+```bash
+make api     # terminal 1
+make ui      # terminal 2 → http://localhost:8501
+```
+
+Streamlit over the HTTP API, so the interface cannot compute a value even by
+accident. Four views:
+
+| View | Answers |
+|---|---|
+| Overview | what is published for this scope, with the evidence beside it |
+| Explorer | every ward as a plan extract, ranked and clickable |
+| Ask | a question in plain language, with citations |
+| Report | a PDF for the scope, with its job status |
+
+The design is a municipal plan sheet rather than a dashboard: a title block that
+states the run, a plan extract with no basemap, annotations in the margin, and
+the flood caveat standing on the page. Nothing animates, because the numbers are
+published rather than live.
+
+Two rules the interface follows everywhere:
+
+- **Absence is a state, not a blank.** Ward-level heat reads "not published at
+  ward level" with the reason; it is never drawn as zero.
+- **A zero is explained.** Coastal exposure of 0% carries the note that the
+  layer does not resolve inside the boundary, and that zero means "not detected
+  at this resolution".
+
 ## Quality gates
 
 ```bash
