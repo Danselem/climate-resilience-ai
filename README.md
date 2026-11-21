@@ -298,6 +298,51 @@ claims. The mart reads its climate and population inputs through recorded
 pointers (`data/processed/<dataset>/latest.json`), never by sorting directory
 names.
 
+### API
+
+The same typed tools, over HTTP. `uv run climate-resilience serve` (or `make api`)
+serves an OpenAPI document at `/docs`.
+
+```bash
+curl "localhost:8000/indicators/hot_days_tmax_ge_35c?scope_id=ethekwini&period_year=2025"
+curl "localhost:8000/rank?indicator_id=flood_exposed_area_pct&mechanism=riverine&return_period_years=100&limit=5"
+curl "localhost:8000/scopes?q=Durban"
+curl -X POST localhost:8000/ask -H 'content-type: application/json' \
+     -d '{"question":"How many people are exposed to the 100-year riverine flood?"}'
+```
+
+| Route | Returns |
+|---|---|
+| `GET /health` | mart row count, document index presence |
+| `GET /coverage` | indicators, periods, mechanisms, return periods that exist |
+| `GET /scopes?q=` | a published scope id from "ward 75", "Durban", `ethekwini-075` |
+| `GET /indicators/{id}` | envelopes for one indicator |
+| `GET /rank` | wards or municipality ranked by one indicator |
+| `GET /rows/{row_key}` | full provenance for one published row |
+| `GET /documents/search` | passages from municipal plans |
+| `POST /ask` | assistant answer, citations, cost and latency |
+
+Two contract decisions matter more than the routes:
+
+- **A missing value is `200` with `status: insufficient`**, not a 404 or a zero.
+  A client cannot mistake "we do not publish this" for "the value is 0".
+- **A malformed parameter is `422` before any tool runs** — `return_period_years`
+  is restricted to 10, 50 or 100, and the message says so.
+
+Flood values without a mechanism return both rows, each labelled. There is no
+combined total to ask for.
+
+**Mart latency (N2, p95 ≤ 1 s), measured with `make bench`:**
+
+```
+get_indicator  p50 0.92 ms   p95 1.98 ms
+rank_scopes    p50 2.07 ms   p95 2.84 ms
+explain        p50 0.32 ms   p95 0.54 ms
+```
+
+Set `CRP_API_KEY` to require `X-API-Key` on every route except `/health`. Unset
+means local use.
+
 ## Quality gates
 
 ```bash

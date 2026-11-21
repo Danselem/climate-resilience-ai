@@ -43,7 +43,11 @@ class Settings(BaseSettings):
     # Document index (pgvector). Deliberately a different store from the mart:
     # prose needs similarity search, measurements need exact keys.
     documents_dsn: str = "postgresql://crp:crp@localhost:5433/crp"
-    embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2"
+    embedding_model: str = "BAAI/bge-base-en-v1.5"
+
+    # Optional API key. Unset means local use; set means every non-health
+    # endpoint requires it. Cloud deployments set it from Secrets Manager.
+    api_key: str | None = None
 
     log_level: str = "INFO"
 

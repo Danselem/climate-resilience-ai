@@ -128,6 +128,18 @@ output's `quality.warnings`.
   rest abstain by design: no rainfall, drought, trend, projection or
   vulnerability indicator exists yet.
 
+## API
+
+- **No rate limiting and no TLS.** `CRP_API_KEY` gates access, but a token
+  bucket per key (§14.2) and TLS termination are deployment concerns that are
+  not built. Running this on a public address without them would be a mistake.
+- **The assistant endpoint is synchronous.** A single `/ask` blocks a worker for
+  1.6–3 s. That is fine at pilot concurrency and wrong at ten concurrent users.
+- **`/documents/search` returns prose with no answer attached.** It is evidence
+  of what a document says, and a caller can still quote it as if it were a
+  measurement. The separation is enforced in the assistant, not in the API
+  contract.
+
 ## Assistant
 
 - **The embedding model is the large object in the process.**

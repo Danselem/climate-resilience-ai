@@ -134,9 +134,9 @@ def ask(
     result = assistant_ask(settings, question, model=model)
 
     typer.echo(result.answer.text)
-    if result.answer.citations:
+    if result.citations:
         typer.echo("\ncitations:")
-        for citation in result.answer.citations:
+        for citation in result.citations:
             typer.echo(f"  [{citation.kind}] {citation.reference}")
     if result.answer.abstained:
         typer.echo("\nmissing:")
@@ -151,6 +151,82 @@ def ask(
     )
     if result.error:
         typer.echo(f"error: {result.error}")
+
+
+@app.command()
+def serve(
+    host: str = typer.Option("127.0.0.1", help="Bind address"),
+    port: int = typer.Option(8000, help="Port"),
+    reload: bool = typer.Option(False, help="Reload on source changes"),
+) -> None:
+    """Run the HTTP API over the same tools the assistant uses."""
+    import uvicorn
+
+    uvicorn.run(
+        "climate_resilience.api.app:app",
+        host=host,
+        port=port,
+        reload=reload,
+        log_level=get_settings().log_level.lower(),
+    )
+
+
+@app.command()
+def bench(
+    iterations: int = typer.Option(50, help="Mart queries to time"),
+) -> None:
+    """Measure mart query latency against N2 (p95 <= 1 s).
+
+    Excludes the model on purpose: this is the read path the API serves, and
+    mixing it with LLM latency would hide which half is slow.
+    """
+    import statistics
+    import time
+
+    from .store import repository
+    from .tools import mart_tools
+
+    settings = get_settings()
+    engine = repository.make_engine(settings.database_url)
+    calls = {
+        "get_indicator": lambda: mart_tools.get_indicator(
+            engine,
+            indicator_id="flood_exposed_area_pct",
+            scope_id="ethekwini-075",
+            mechanism="riverine",
+            return_period_years=100,
+        ),
+        "rank_scopes": lambda: mart_tools.rank_scopes(
+            engine,
+            indicator_id="flood_exposed_area_pct",
+            mechanism="riverine",
+            return_period_years=100,
+            limit=10,
+        ),
+        "explain": lambda: mart_tools.explain(
+            engine,
+            row_key=mart_tools.get_indicator(
+                engine,
+                indicator_id="hot_days_tmax_ge_35c",
+                scope_id="ethekwini",
+                period_year=2025,
+            ).row_keys[0],
+        ),
+    }
+    for name, call in calls.items():
+        call()  # warm
+        samples = []
+        for _ in range(iterations):
+            started = time.perf_counter()
+            call()
+            samples.append((time.perf_counter() - started) * 1000)
+        samples.sort()
+        p95 = samples[min(len(samples) - 1, int(round(0.95 * (len(samples) - 1))))]
+        typer.echo(
+            f"  {name:<14} p50 {statistics.median(samples):6.2f} ms   "
+            f"p95 {p95:6.2f} ms   max {max(samples):6.2f} ms"
+        )
+    typer.echo("target         : p95 <= 1000 ms per call (N2)")
 
 
 @app.command("eval-assistant")

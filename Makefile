@@ -1,4 +1,4 @@
-.PHONY: sync lint format test check data data-offline build boundaries wards climate mart verify all clean
+.PHONY: sync lint format test check data data-offline build boundaries wards climate mart verify all clean api bench
 
 sync:
 	uv sync --all-groups
@@ -38,6 +38,12 @@ climate:
 
 mart:
 	uv run climate-resilience mart
+
+api:
+	uv run climate-resilience serve --port 8000
+
+bench:
+	uv run climate-resilience bench
 
 verify:
 	uv run climate-resilience verify
