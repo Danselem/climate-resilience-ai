@@ -34,6 +34,11 @@ PLUVIAL_REASON = (
 MEASUREMENT_TERMS = (
     "how many",
     "how much",
+    "how has",
+    "how have",
+    "has changed",
+    "changed across",
+    "changed since",
     "what percentage",
     "what share",
     "what fraction",

@@ -54,10 +54,11 @@ MAX_DOCUMENTS = 6
 # model that self-corrects needs two extra rounds, and failing outright costs
 # more than the extra calls. Measured worst case at 4 rounds: ~$0.0003.
 MAX_REQUESTS = 4
-# The specification says three. Measured, models that self-correct need five:
-# resolve a scope, query, re-query, then answer. Tool calls are local SQL and
-# their results are capped at five rows, so the cost is bounded by the row cap,
-# not by the call count.
+# The specification says three. Measured, five is what a model needs when it
+# self-corrects: query, re-query, then answer. This is a ceiling, not a target;
+# most questions finish in one or two. Raising it to ten did not recover the
+# questions that failed -- those were looping, not short of budget -- so it went
+# back down.
 MAX_TOOL_CALLS = 5
 
 # A free endpoint first, because it is free and it works; a cheap paid model
@@ -97,6 +98,25 @@ FLOOD_CAVEAT = (
     "Caveat: riverine and coastal flooding only. Pluvial (surface-water) "
     "flooding is not modelled."
 )
+
+# Models repeat a successful call when nothing tells them the result is final.
+# This is information, not a budget: both tools are idempotent, and the same
+# arguments return the same rows. Naming the tool matters — nova-micro ignored a
+# softer phrasing and repeated the call until the request budget ran out.
+RANKING_COMPLETE = (
+    "This ranking is complete and is the final evidence for the question. Do "
+    "not call rank_scopes again with the same arguments; answer now."
+)
+
+DOCUMENTS_COMPLETE = (
+    "These passages are the retrieved evidence. Do not call search_documents "
+    "again with the same query; answer from them now, or abstain naming what "
+    "they do not cover."
+)
+
+
+def _join_messages(first: str | None, second: str) -> str:
+    return f"{first}. {second}" if first else second
 
 
 @dataclass
@@ -219,14 +239,21 @@ def document_search(settings: Settings) -> Callable[[str, str | None, int], Docu
 
 
 def _model_settings() -> dict[str, object] | None:
-    """OpenRouter routing preferences.
+    """OpenRouter routing preferences and sampling.
 
     Default routing balances price, latency and reliability; ``sort`` pins one.
     It is configurable because pinning latency can route to a provider that is
     faster per token and worse per tool call, which is a regression, not an
     optimisation.
+
+    Temperature is pinned at zero: this is an extraction task with one right
+    answer, and sampling noise showed up as a model that repeated the same tool
+    call until the request budget ran out.
     """
-    settings: dict[str, object] = {"max_tokens": MAX_OUTPUT_TOKENS}
+    settings: dict[str, object] = {
+        "max_tokens": MAX_OUTPUT_TOKENS,
+        "temperature": 0,
+    }
     sort = os.environ.get("LLM_PROVIDER_SORT", "latency").strip()
     if sort:
         settings["extra_body"] = {"provider": {"sort": sort}}
@@ -315,13 +342,15 @@ def _register(agent: Agent[ToolDeps, Answer]) -> None:
             return_period_years=return_period_years,
             period_year=period_year,
         )
+        if output.ok:
+            # nova-micro emitted the identical rank_scopes call eight times in
+            # a row, deterministically, with a successful result each time: it
+            # had no signal that the ranking was final. Saying so costs eight
+            # tokens and ends the loop at one call.
+            output = output.model_copy(
+                update={"message": _join_messages(output.message, RANKING_COMPLETE)}
+            )
         return _measurements(output, ctx.deps)
-
-    @agent.tool
-    def resolve_scope(ctx: RunContext[ToolDeps], query: str) -> ToolOutput:
-        """Turn "ward 75", a ward id or a place name into a published scope id."""
-        ctx.deps.tools_used.append("resolve_scope")
-        return mart_tools.resolve_scope(ctx.deps.engine, query=query)
 
     @agent.tool
     def coverage(ctx: RunContext[ToolDeps]) -> ToolOutput:
@@ -355,16 +384,21 @@ def _register(agent: Agent[ToolDeps, Answer]) -> None:
         """
         ctx.deps.tools_used.append("search_documents")
         result = ctx.deps.search(query, scope_id, max(1, min(limit, MAX_DOCUMENTS)))
+        if result.status == "ok" and result.hits:
+            result = result.model_copy(
+                update={"message": _join_messages(result.message, DOCUMENTS_COMPLETE)}
+            )
         ctx.deps.documents.extend(result.hits)
         return result
 
 
 def _normalise_scope(engine: Engine, scope_id: str | None) -> str | None:
-    """Accept the id a model invents, resolve it to the published one.
+    """Accept the id or name a model invents, resolve it to the published one.
 
-    Models write ``ward_75``, ``Ward 75`` or ``ethekwini-075`` for the same
-    thing. Making them call ``resolve_scope`` first costs a whole round trip on
-    a three-request budget, so the lookup happens here instead.
+    Models write ``ward_75``, ``Ward 75``, ``Durban`` or ``ethekwini-075`` for
+    the same thing. Resolving inside the tool is why ``resolve_scope`` is not a
+    tool of its own: offering it invited models to resolve every name they had
+    already been given, five calls at a time, until the budget ran out.
     """
     if scope_id is None:
         return None

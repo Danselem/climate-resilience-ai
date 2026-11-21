@@ -29,6 +29,31 @@ WARD_PATTERN = re.compile(
 )
 NUMBER_PATTERN = re.compile(r"\d{1,3}")
 
+# Planners write the city's name, not the boundary id. "Durban" is the only one
+# that does not contain "ethekwini", so it needs an explicit alias; the rest are
+# handled by stripping the generic suffix below. Without this, the most natural
+# way to name the municipality returned "no published scope matches".
+MUNICIPALITY_ALIASES = {
+    "durban": "ethekwini",
+    "city of durban": "ethekwini",
+    "ethekwini municipality": "ethekwini",
+    "ethekwini metropolitan municipality": "ethekwini",
+    "ethekwini metro": "ethekwini",
+    "the metro": "ethekwini",
+    "metro": "ethekwini",
+    "ethekwini metropolitan area": "ethekwini",
+}
+
+# Suffixes that carry no information about which scope is meant. Longest first,
+# because "eThekwini local municipality" also ends with " municipality".
+SCOPE_SUFFIXES = (
+    " metropolitan municipality",
+    " local municipality",
+    " metropolitan area",
+    " municipality",
+    " metro",
+)
+
 
 def _rows(engine: Engine, stmt: Select) -> list[dict[str, object]]:
     with engine.connect() as conn:
@@ -273,7 +298,22 @@ def resolve_scope(engine: Engine, *, query: str) -> ToolOutput:
     if not text:
         return ToolOutput.insufficient("the scope query is empty")
 
-    lowered = text.lower()
+    lowered = text.lower().replace("_", " ").strip()
+
+    # Canonicalise before matching, so "eThekwini Municipality" behaves exactly
+    # like "ethekwini" and "Durban" resolves to the pilot municipality.
+    alias = MUNICIPALITY_ALIASES.get(lowered)
+    if alias is not None:
+        lowered = alias
+    else:
+        stripped = lowered.removeprefix("the ")
+        for suffix in SCOPE_SUFFIXES:
+            if stripped.endswith(suffix):
+                stripped = stripped.removesuffix(suffix).strip()
+                break
+        if stripped:
+            lowered = stripped
+
     boundaries = _rows(engine, select(boundary))
     crosswalk = {
         str(row["ward_id"]): row
@@ -310,7 +350,10 @@ def resolve_scope(engine: Engine, *, query: str) -> ToolOutput:
     scopes = [
         ScopeRef(
             level=str(row["level"]),  # type: ignore[arg-type]
-            id=str(row["boundary_id"]),
+            # The mart publishes lower-case scope ids ("ethekwini") while the
+            # boundary layer carries the source's spelling ("eThekwini"). Return
+            # the published id, or every caller gets one that matches no row.
+            id=str(row["boundary_id"]).lower(),
             name=str(row["name"]),
             ward_number=(crosswalk.get(str(row["boundary_id"])) or {}).get(
                 "ward_number"

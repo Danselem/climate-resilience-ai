@@ -463,7 +463,7 @@ def test_more_than_five_rows_are_truncated_with_a_note() -> None:
     assert result.method is not None
 
 
-def test_the_agent_exposes_six_tools_and_structured_output() -> None:
+def test_the_agent_exposes_five_tools_and_structured_output() -> None:
     seen: set[str] = set()
 
     def script(messages: list[Any], info: AgentInfo) -> ModelResponse:
@@ -474,10 +474,11 @@ def test_the_agent_exposes_six_tools_and_structured_output() -> None:
     with agent.override(model=FunctionModel(script)):
         result = agent.run_sync("question", deps=deps())
 
+    # resolve_scope is deliberately absent: it is internal plumbing that the
+    # model used as a crutch, re-resolving names it had already been given.
     assert seen == {
         "get_indicator",
         "rank_scopes",
-        "resolve_scope",
         "coverage",
         "explain",
         "search_documents",

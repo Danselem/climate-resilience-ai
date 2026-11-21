@@ -255,7 +255,9 @@ def seed_boundaries(engine) -> None:
                     "geometry_wkt": "POLYGON ((0 0, 1 0, 1 1, 0 0))",
                 },
                 {
-                    "boundary_id": "ethekwini",
+                    # The source spells it with a capital T; the mart publishes
+                    # "ethekwini". Resolving must return the published id.
+                    "boundary_id": "eThekwini",
                     "level": "municipality",
                     "name": "eThekwini",
                     "code": None,
@@ -303,6 +305,48 @@ def test_resolve_scope_accepts_a_municipality_name(engine) -> None:
 
     assert result.status == "ok"
     assert result.scopes[0].level == "municipality"
+
+
+@pytest.mark.parametrize(
+    "query",
+    [
+        "eThekwini Municipality",
+        "eThekwini Metropolitan Municipality",
+        "eThekwini metro",
+        "ethekwini local municipality",
+        "Durban",
+        "City of Durban",
+        "the metro",
+    ],
+)
+def test_resolve_scope_accepts_the_ways_planners_name_the_city(engine, query) -> None:
+    seed_boundaries(engine)
+
+    result = resolve_scope(engine, query=query)
+
+    assert result.status == "ok", query
+    assert [scope.id for scope in result.scopes] == ["ethekwini"], query
+
+
+def test_the_resolved_id_is_the_one_the_mart_publishes(engine) -> None:
+    seed_boundaries(engine)
+    seed_heat(engine)
+
+    scope = resolve_scope(engine, query="eThekwini Municipality").scopes[0]
+
+    result = get_indicator(engine, indicator_id=HEAT, scope_id=scope.id)
+
+    assert scope.id == "ethekwini"
+    assert result.status == "ok", result.message
+
+
+def test_resolve_scope_keeps_a_ward_number_ahead_of_name_matching(engine) -> None:
+    seed_boundaries(engine)
+
+    result = resolve_scope(engine, query="Ward 75, eThekwini Municipality")
+
+    assert result.status == "ok"
+    assert [scope.id for scope in result.scopes] == ["ethekwini-075"]
 
 
 def test_resolve_scope_refuses_a_place_it_does_not_hold(engine) -> None:
