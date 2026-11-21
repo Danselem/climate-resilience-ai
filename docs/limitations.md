@@ -128,6 +128,22 @@ output's `quality.warnings`.
   rest abstain by design: no rainfall, drought, trend, projection or
   vulnerability indicator exists yet.
 
+## Reports
+
+- **No maps.** The specification asks for static maps; the report contains
+  tables only. Drawing a ward choropleth needs a plotting dependency the MVP
+  does not otherwise use, and a report without a map is still complete and
+  defensible. This is a gap, not a decision.
+- **The queue is a table, not SQS.** `enqueue`/`claim` are the same interface
+  SQS will implement, and the worker is the same entrypoint. Retries, a DLQ and
+  a concurrency cap are not built.
+- **No signed URLs and no S3.** Reports are written to `data/reports/` locally.
+- **PDF generation is unmeasured against N3 (≤ 60 s, p95).** A ward report
+  renders in a couple of seconds here; the figure has not been recorded.
+- **`report --scope` accepts anything the scope resolver accepts**, including
+  ambiguous names. A typo becomes a `LookupError` rather than a report, which is
+  correct, but there is no preview of which scope was chosen before rendering.
+
 ## API
 
 - **No rate limiting and no TLS.** `CRP_API_KEY` gates access, but a token

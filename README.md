@@ -343,6 +343,37 @@ explain        p50 0.32 ms   p95 0.54 ms
 Set `CRP_API_KEY` to require `X-API-Key` on every route except `/health`. Unset
 means local use.
 
+### PDF reports
+
+A report is the same mart rows, rendered for a human, with every figure carried
+into an evidence appendix. Flood caveat in the page header, on every page.
+
+```bash
+make report                     # report for the municipality
+uv run climate-resilience report --scope "ward 75"
+uv run climate-resilience worker    # drain the local queue, as SQS will feed it
+```
+
+```
+report       : data/reports/<job_id>.pdf
+```
+
+Each report writes a sidecar `<job_id>.json` holding the envelopes it was built
+from, so a PDF can be diffed against the mart without re-reading it.
+
+The job table is the SQS stand-in: `enqueue` and `claim` are the whole contract,
+so the cloud path swaps the transport and not the worker.
+
+Rendering needs Pango. The container image installs it; on macOS:
+
+```bash
+brew install pango
+DYLD_FALLBACK_LIBRARY_PATH=/opt/homebrew/lib uv run climate-resilience report --scope "ethekwini"
+```
+
+Without it the command fails with a message that names the fix, not a dlopen
+traceback.
+
 ## Quality gates
 
 ```bash

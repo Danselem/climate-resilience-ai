@@ -1,6 +1,14 @@
 # Single image, two entrypoints: `cli` today, `api` and `worker` in later phases.
 FROM python:3.12-slim
 
+# WeasyPrint loads Pango and GObject at run time; without them the report
+# worker fails with a dlopen traceback rather than a PDF.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        libpango-1.0-0 libpangocairo-1.0-0 libgdk-pixbuf-2.0-0 \
+        libffi8 shared-mime-info fonts-dejavu-core \
+    && rm -rf /var/lib/apt/lists/*
+
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     UV_COMPILE_BYTECODE=1 \

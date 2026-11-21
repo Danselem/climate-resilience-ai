@@ -172,6 +172,75 @@ def serve(
 
 
 @app.command()
+def report(
+    scope: str = typer.Option(..., help="Ward number, id or municipality"),
+    now: bool = typer.Option(True, help="Run the job immediately instead of queueing"),
+) -> None:
+    """Queue a PDF evidence report for one scope."""
+    from .reports import enqueue, process
+    from .reports.jobs import claim
+    from .store import repository
+
+    settings = get_settings()
+    engine = repository.make_engine(settings.database_url)
+    job_id = enqueue(engine, scope)
+    if not now:
+        typer.echo(f"queued       : {job_id}")
+        return
+    job = claim(engine)
+    if job is None:
+        typer.echo("queue empty")
+        return
+    from .reports import RendererUnavailable, fail, finish
+
+    try:
+        path = process(engine, settings, job)
+    except RendererUnavailable as exc:
+        fail(engine, job.job_id, str(exc))
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(code=2) from exc
+    except LookupError as exc:
+        fail(engine, job.job_id, str(exc))
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(code=1) from exc
+    finish(engine, job.job_id, path)
+    typer.echo(f"report       : {path}")
+
+
+@app.command()
+def worker(once: bool = typer.Option(False, help="Drain the queue and exit")) -> None:
+    """Process queued report jobs. The same entrypoint SQS will feed."""
+    import time
+
+    from .reports import RendererUnavailable, claim, fail, finish, process
+    from .store import repository
+
+    settings = get_settings()
+    engine = repository.make_engine(settings.database_url)
+    while True:
+        job = claim(engine)
+        if job is None:
+            if once:
+                return
+            time.sleep(2)
+            continue
+        try:
+            path = process(engine, settings, job)
+        except RendererUnavailable as exc:
+            fail(engine, job.job_id, str(exc))
+            typer.echo(str(exc), err=True)
+            return
+        except Exception as exc:  # noqa: BLE001 - job state records the failure
+            fail(engine, job.job_id, str(exc))
+            typer.echo(f"job {job.job_id} failed: {exc}", err=True)
+            continue
+        finish(engine, job.job_id, path)
+        typer.echo(f"job {job.job_id} done: {path}")
+        if once:
+            return
+
+
+@app.command()
 def bench(
     iterations: int = typer.Option(50, help="Mart queries to time"),
 ) -> None:

@@ -229,6 +229,7 @@ data/processed/
 data/manifests/
 data/mart.db
 data/mart.db-journal
+data/reports/
 !data/catalogue/
 !data/reference/
 
