@@ -1,0 +1,245 @@
+{
+  "document": "durban-cap-2019",
+  "corpus_chunks": 156,
+  "method": "Relevance judged from the document text, not from retrieval output. Every chunk in the 156-chunk corpus was read as a heading plus excerpt; ambiguous excerpts were read in full. A chunk is relevant if it contains material that answers the question, not merely if it shares a topic word.",
+  "limitation": "Single annotator. Relevance is binary and only chunks that clearly answer the question are labelled, so recall is a lower bound: an unlabelled but relevant chunk is scored as a miss.",
+  "questions": [
+    {
+      "id": "cap-sea-level",
+      "question": "What does the Climate Action Plan say about sea level rise?",
+      "relevant": [
+        "092b0cbe0d1a75237afea87408851154",
+        "4abce171ecbd5f5caf16973a989be70f",
+        "56dd908256887d29d554769212eae7ce",
+        "88153d544f6a43feeb0ab5059d67eee2",
+        "955a23decfd4becf688bb3249118fe76"
+      ]
+    },
+    {
+      "id": "cap-coastal-erosion",
+      "question": "What does the plan say about coastal erosion and dunes?",
+      "relevant": [
+        "4abce171ecbd5f5caf16973a989be70f",
+        "56dd908256887d29d554769212eae7ce",
+        "88153d544f6a43feeb0ab5059d67eee2",
+        "c0e7cba370204487df7e9fb86fe0069c"
+      ]
+    },
+    {
+      "id": "cap-water",
+      "question": "What does the plan propose for water supply and sanitation?",
+      "relevant": [
+        "038a3751be2453685b3497ce9b90b2b0",
+        "6fdb8c443b59eecd367e8c43e2fddfd2",
+        "7573e3238f9d0758d6d6bfb9f7c03094",
+        "dfacf554adea087ac27ff2b6c1e13c55",
+        "f6eb01b2ee9cd2c24c3cc955113c4825"
+      ]
+    },
+    {
+      "id": "cap-flooding",
+      "question": "What does the plan say about flooding?",
+      "relevant": [
+        "08c575c0b1844147422d8a9287b3a949",
+        "2ede674877b415f58eb75e74e2b601ad",
+        "52165a507c726023e21fcaccf32f16cc",
+        "741bd177d6129f773a7f197834d9a511",
+        "991915c9b826562f7c1633b419bf118f"
+      ]
+    },
+    {
+      "id": "cap-biodiversity",
+      "question": "What does the Climate Action Plan say about biodiversity?",
+      "relevant": [
+        "5e7e770a30208e118a92e6e6989a7d44",
+        "929e7b37ccd53824da067dfdf3e8722f",
+        "9c16ed324d4cab6260cf67f6d308d402",
+        "b9e5be905f069cb06b40d73410f4c188",
+        "cee0de69efd6723ec1aa86717309870f",
+        "df56675bfeb436a136765220cfec0356"
+      ]
+    },
+    {
+      "id": "cap-energy",
+      "question": "What does the plan propose for energy and electricity?",
+      "relevant": [
+        "19663a91f27429899f1351f8ec4707c7",
+        "28efffe9509fbc524be83208e08e2ccc",
+        "2975c37a22023e675b933083395996b7",
+        "6dcab890b0a69d88bac4e190593847b1",
+        "cde3eeb265d2c803c58c531bd804561a",
+        "f8ad68650405c357149660b53aab624e"
+      ]
+    },
+    {
+      "id": "cap-renewables",
+      "question": "What renewable energy targets does the plan set?",
+      "relevant": [
+        "26857df7af3c3d227b5f3fd637eabae3",
+        "28efffe9509fbc524be83208e08e2ccc",
+        "7bcefb5750e3ab2bf0abe30037a3e66d",
+        "cde3eeb265d2c803c58c531bd804561a"
+      ]
+    },
+    {
+      "id": "cap-waste",
+      "question": "What does the Climate Action Plan say about waste?",
+      "relevant": [
+        "0fd008cc94161714b6bd5ea759c34496",
+        "1992b9ecf4ea5b2d5ddc4b31907a8f94",
+        "2defd7395674b284079520b79a653108",
+        "62cd57d7bb8c592d364f7d3b687e0924",
+        "653e0bd0ac3918aba01847348e3b3488"
+      ]
+    },
+    {
+      "id": "cap-food",
+      "question": "What does the plan say about food security?",
+      "relevant": [
+        "170278daed57dc1330fe883c94c796ac",
+        "314e629ff3a5341a52959e432af2753e",
+        "82d5aaf5e3fbc0e78d40fb340041da85",
+        "b89102bacae25d1028c4b0addee6e78a"
+      ]
+    },
+    {
+      "id": "cap-transport",
+      "question": "What does the plan propose for transport?",
+      "relevant": [
+        "715576cca356faf2bd2497ddcb37ca26",
+        "7aed18f7c365d2a3c93848c68d271a4c",
+        "7e8a8a37f858bd70852f1e59b9bc7afa",
+        "d0a7799bb5df48da5498c8e47c6737d3",
+        "da4c5483933c80f96f83131943ff0815",
+        "f841868a3028401a99416f06e0f23877"
+      ]
+    },
+    {
+      "id": "cap-heat-health",
+      "question": "What does the plan say about heat and its health impacts?",
+      "relevant": [
+        "8c8259f6e440298959454e49901d4fb4",
+        "c0a447992b121df9a65ef7eb8e2affb3",
+        "ebe40f159025264249619e72eefab4cd",
+        "ef068bf5adf439602557995aed0824f0"
+      ]
+    },
+    {
+      "id": "cap-disease",
+      "question": "What does the plan say about water and vector borne disease?",
+      "relevant": [
+        "1eea5677d7422ec21db41a90febe6b48",
+        "f25f0c405ba89756b656e184f1b95086",
+        "fb5b28ebf3a3041626a08d7c67c8f5b8"
+      ]
+    },
+    {
+      "id": "cap-governance",
+      "question": "What does the plan say about climate change governance?",
+      "relevant": [
+        "44cbf8c4e28acc8874031f1c5067a5f7",
+        "564d5dcc9128a9044e4a875ae20a1df8",
+        "e6521efe002c04c6cb92a3f347f3c989",
+        "f1990f9976251a57e7756da0e933ea73"
+      ]
+    },
+    {
+      "id": "cap-financing",
+      "question": "How does the plan propose to finance climate action?",
+      "relevant": [
+        "6f44cdb857147db17f4c782dd0b9019b",
+        "806edb2c5ce7bcbd3b12fa74f8bef6cf",
+        "8d2ceab78cd76882880e3beffa33a419",
+        "cf5fe642ba67ed01822fe5f007109c77"
+      ]
+    },
+    {
+      "id": "cap-ghg-inventory",
+      "question": "What were Durban's greenhouse gas emissions and where do they come from?",
+      "relevant": [
+        "0db69c58aef4754caca6424af2f98292",
+        "6710af4688b4bfabb4118b44a57895c9",
+        "69407e220232d3b5c59c5ec3a1d15d0b",
+        "c270a1880604bc913c9783702a53656a",
+        "e10c1740b6705ca7b61f84ec2a783fac"
+      ]
+    },
+    {
+      "id": "cap-emissions-pathway",
+      "question": "What emissions reduction pathway does the plan set?",
+      "relevant": [
+        "037508c48cdff635dde45d5f94b71732",
+        "5d3c979ca4678a6a1eb39619047fe83f",
+        "685e71cf9795431b3805278f83f631e5",
+        "f1f49542f95af37a2c6c5d2a941c3057"
+      ]
+    },
+    {
+      "id": "cap-temperature-trends",
+      "question": "What does the plan say about observed temperature trends in Durban?",
+      "relevant": [
+        "0f7b579334a756584734c1a51eedb22a",
+        "38731ea54063b40fe4e18d1dd24ca12c",
+        "54b1adfef803f276699ec48626b09b71",
+        "e47e29656c93c4ff844f50a8b5e37623"
+      ]
+    },
+    {
+      "id": "cap-drought",
+      "question": "What does the plan say about drought?",
+      "relevant": [
+        "1e301bf4f72a836583eeb83c97cb6fd5",
+        "42ffb4d09e57b8920113533469cf2073"
+      ]
+    },
+    {
+      "id": "cap-targets",
+      "question": "What are the plan's 2030 and 2050 targets?",
+      "relevant": [
+        "26857df7af3c3d227b5f3fd637eabae3",
+        "4a9b74aed0b7d32210d2e27cc262d66c",
+        "685e71cf9795431b3805278f83f631e5",
+        "d475211cd329601ff8d8691cff7262ee"
+      ]
+    },
+    {
+      "id": "cap-monitoring",
+      "question": "How will the plan be monitored and updated?",
+      "relevant": [
+        "3095ec2d195181450d183d4f83e483ae",
+        "61331babe9548c84eb635d8fa1cbcf07",
+        "eb0a3be3823d3966867e6c1960fa8e4e"
+      ]
+    },
+    {
+      "id": "cap-informal-settlements",
+      "question": "What does the plan say about informal settlements and vulnerable communities?",
+      "relevant": [
+        "52165a507c726023e21fcaccf32f16cc",
+        "626deb8e2478d0688d00b903f06c47cf",
+        "741bd177d6129f773a7f197834d9a511",
+        "991915c9b826562f7c1633b419bf118f"
+      ]
+    },
+    {
+      "id": "cap-city-profile",
+      "question": "What are the key facts about Durban as a city?",
+      "relevant": [
+        "35f8b7ab3a1990dd504f1a07b749142a",
+        "626deb8e2478d0688d00b903f06c47cf",
+        "a58fefc1cbb967792b1630473c895b8b",
+        "d47a4538eba8123370ec53101b5f80bf"
+      ]
+    },
+    {
+      "id": "cap-prioritisation",
+      "question": "How were the plan's actions prioritised?",
+      "relevant": [
+        "174dc7aef8b056d6c4e622deb7ddc691",
+        "513f276b980a706251a93cf06a349829",
+        "653e0bd0ac3918aba01847348e3b3488",
+        "cb2cd18f70452a858a06610be70c503b"
+      ]
+    }
+  ]
+}

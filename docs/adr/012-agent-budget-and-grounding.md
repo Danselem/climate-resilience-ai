@@ -15,9 +15,11 @@ are enforced by the runtime, not requested in a prompt.
 
 ## Decision
 
-- **`UsageLimits(request_limit=2, tool_calls_limit=3)`.** Two requests is the
-  design: the first selects tools, the second synthesises. A third round is
-  stopped by the runtime and the run is reported as incomplete.
+- **`UsageLimits(request_limit=4, tool_calls_limit=5)`.** Two requests is the
+  design: the first selects tools, the second synthesises. Four is the measured
+  ceiling for a model that self-corrects, and anything beyond it is a loop
+  rather than progress. It is a ceiling, not a target. (Originally 2 and 3,
+  which aborted mid-question; see the loop amendment.)
 - **One model per run.** Model tiering (small model for intent, capable model
   for synthesis) is not expressible in a single Pydantic AI run, because the
   two requests belong to one agent execution. It is deferred, and the
@@ -33,7 +35,7 @@ are enforced by the runtime, not requested in a prompt.
   text. The distinction that keeps this sound is *measurement intent*: "what
   does the plan say about pluvial flooding" is a document question and passes;
   "how many people are exposed to pluvial flooding" is refused.
-- **Tool results are trimmed to ten rows.** An unbounded `rank_scopes` result
+- **Tool results are trimmed to five rows.** An unbounded `rank_scopes` result
   would put the whole mart in the prompt. The trim is stated to the model, so a
   truncated ranking is never mistaken for a complete one.
 - **The flood caveat is post-checked.** If any flood measurement entered the
@@ -95,6 +97,43 @@ Two findings changed the configuration:
   every measurement, which is most of the 8.4k. Trimming the payload is the
   first latency lever, ahead of changing models.
 
+## Amended: the loop was a deterministic fixed point
+
+Six of forty-eight questions aborted on the request ceiling. The cause was not
+the budget. With sampling unset, `nova-micro` emitted the *identical* tool call —
+same name, same arguments — received five successful rows each time, and never
+concluded. Raising the ceiling to ten did not recover one question: one run went
+from four requests to nine.
+
+Three decisions followed, each measured:
+
+- **Temperature is pinned at 0.** With it unset the same 48 items scored 75–94%
+  across runs; pinned, they produce the same result twice, with the same
+  failures. A task with one right answer should not sample, and the variance was
+  hiding which failures were real.
+- **A complete result says it is complete.** `rank_scopes` and
+  `search_documents` now end a successful result with the statement that the
+  result is final and a request not to repeat the call with the same arguments.
+  This is information about an idempotent tool, not a nudge. A softer phrasing
+  ("ranking complete") was tested separately and ignored — the model repeated
+  the call seven times — so the message names the tool.
+- **`resolve_scope` is no longer a model-facing tool.** It invited the model to
+  re-resolve names already present in the results, five calls at a time.
+  Resolution happens inside `get_indicator`, which is where an invented scope id
+  has to be normalised anyway. Five tools remain.
+
+Also fixed while measuring: `resolve_scope` returned the boundary id
+(`eThekwini`) while the mart publishes `ethekwini`, so resolving the city
+produced an id that matched no row; and the tool did not accept `Durban`,
+`eThekwini Municipality` or `City of Durban` at all.
+
+The deterministic alternative — refusing a repeated call — was tried and
+rejected: the model answered "not available" about data that exists, which is
+worse than an abort.
+
+Measured after: 48/48 on two consecutive runs, p50 1.6 s, p95 2.9 s, $0.00017
+per question, zero errors.
+
 ## Consequences
 
 - Offline tests exercise the whole orchestration with `FunctionModel`: tool
@@ -106,8 +145,9 @@ Two findings changed the configuration:
 - The guard is keyword-based and deliberately narrow. A question it misses
   still reaches tools that cannot answer it, so the failure mode is a slower
   refusal, not a wrong answer.
-- No response cache yet. Repeated questions cost the same as first ones, which
-  is visible in the cost measurement that has not run.
+- No response cache yet. Repeated questions cost the same as first ones. At
+  $0.00017 per question the cache is not worth its invalidation risk until a
+  paid model with a larger prompt is in use.
 
 ## Revisit triggers
 

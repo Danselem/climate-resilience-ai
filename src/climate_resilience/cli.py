@@ -160,8 +160,12 @@ def eval_assistant(
     category: str | None = typer.Option(
         None, help="Only run one category: analytical, document, abstain, adversarial"
     ),
+    retrieval: bool = typer.Option(
+        True, "--retrieval/--no-retrieval", help="Also score retrieval against labels"
+    ),
 ) -> None:
-    """Run the gold set and report pass/fail, latency and cost."""
+    """Run the gold set and report pass/fail, latency, cost and retrieval."""
+    from .evaluation.retrieval import evaluate
     from .evaluation.runner import load_benchmark, run_benchmark, summarise
 
     settings = get_settings()
@@ -179,6 +183,21 @@ def eval_assistant(
     typer.echo(f"cost          : mean ${summary['mean_cost_usd']} "
                f"total ${summary['total_cost_usd']}")
     typer.echo(f"errors        : {summary['errors']}")
+
+    if retrieval:
+        scored = evaluate(settings)
+        report.retrieval = scored.model_dump()
+        typer.echo("")
+        typer.echo(f"retrieval     : {scored.questions} labelled questions "
+                   f"({scored.label_source.split(',')[0]})")
+        typer.echo(f"  recall@5    : {scored.recall_at_5}")
+        typer.echo(f"  recall@10   : {scored.recall_at_10}")
+        typer.echo(f"  mrr         : {scored.mrr}")
+        typer.echo(f"  ndcg@5      : {scored.ndcg_at_5}")
+        worst = sorted(scored.per_question, key=lambda item: item.ndcg_at_5)[:3]
+        typer.echo("  weakest     : " + ", ".join(
+            f"{item.id} ({item.ndcg_at_5})" for item in worst
+        ))
 
     failures = report.failures()
     if failures:

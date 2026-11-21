@@ -85,29 +85,44 @@ output's `quality.warnings`.
 
 ## Evaluation
 
-- **48 items, not the 150 the framework asks for.** The 150 needs manual
-  labelling of retrieval ground truth, which has not been done. 48 is enough to
-  detect regressions and not enough to claim general accuracy.
-- **Accuracy varies run to run (75–94%).** The same model, same items. Most
-  failures are request-limit aborts when it loops, not wrong analysis. Averaging
-  them would hide the variance, so the range is reported.
+- **48 items, not the 150 the framework asks for.** 48 is enough to detect a
+  regression and not enough to claim general accuracy. Expanding it needs more
+  authored questions, not more data.
+- **The 48/48 is on a set that has now been seen.** Temperature is pinned at 0
+  and the three failure causes behind the previous 42/48 were fixed and
+  reproduced. That removes the variance, but it does not remove the risk that
+  the gold set is easy: it was written by the same person who built the tools,
+  and document items pass on retrieval rather than on use.
 - **Analytical references are independent of the tools, not of the data.** The
   expected row is found with SQL from the published parameters. That catches a
   tool returning the wrong row; it cannot catch the mart itself being wrong,
   which is `scripts/independent_check.py`'s job.
-- **Retrieval quality is not measured.** Recall@k, MRR and nDCG need labelled
-  relevant chunks. The document items only check that the right document was
-  cited, which is a weaker claim.
+- **Retrieval quality is measured, and it is the weakest part.** Recall@5 0.50,
+  Recall@10 0.71, MRR 0.78, nDCG@5 0.54 over 23 questions and 99 labelled
+  passages. Half the passages that answer a question are missing from the top
+  five. The document items in the answer set only require that the right
+  document was cited, so they overstate how usable the prose is.
+- **The relevance labels are single-annotator.** One person read the corpus and
+  decided which passages answer each question, before running retrieval. The
+  numbers are reproducible and unaudited. Binary relevance and conservative
+  labelling mean Recall is a lower bound: an unlabelled-but-relevant passage
+  scores as a miss.
 - **Adversarial coverage is now 8/8, but the guard is not general.** The
   injection that previously succeeded is caught by a contradiction check: an
   answer asserting absence while citing a positive exposure value is rejected.
   That covers claims which contradict the retrieved evidence. It cannot catch an
   injected claim that is merely *unrelated* to the evidence, and it cannot catch
   a model persuaded to stay silent about a figure it did retrieve.
-- **Six of forty-eight items fail on the request ceiling.** The model loops on
-  some questions and is stopped. Raising the ceiling to five requests did not
-  improve accuracy and pushed p95 from 3.9 s to 5.5 s, so it was reverted. These
-  are recorded as failures rather than tuned away.
+- **The tool loop was fixed by wording, which is fragile.** nova-micro repeated
+  an identical `rank_scopes` call until the budget ran out. The fix is that the
+  tool tells the model its result is final and names itself. A softer phrasing
+  was tested and ignored; a differently-worded model may need the message
+  rewritten. The deterministic alternative — refusing a repeated call — was
+  tried and produced a false "not available" answer about data that exists.
+- **Analytical coverage of §3 is still thin.** Two of the seven question shapes
+  in the specification are answerable (flood exposure, heat-day counts). The
+  rest abstain by design: no rainfall, drought, trend, projection or
+  vulnerability indicator exists yet.
 
 ## Assistant
 

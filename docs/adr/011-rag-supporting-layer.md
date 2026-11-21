@@ -71,8 +71,44 @@ Putting them in one table would let the first pass as the second.
   than as a retrieval miss.
 - The RAG path requires Docker (Postgres). `make data` does not: the mart stays
   SQLite-portable.
-- One document is indexed. Retrieval quality cannot be claimed from a corpus
-  this size; the evaluation harness has not run yet.
+- One document is indexed. Retrieval quality is now measured against that one
+  document and cannot be generalised to a corpus of ten.
+
+## Amended: retrieval is measured against labelled passages
+
+Recall@5, Recall@10, MRR and nDCG@5 need ground truth, so 23 questions were
+labelled against the 156-chunk corpus: 99 passage judgements, written from the
+document text before any retrieval was run. `eval-assistant` now reports
+retrieval beside answer quality and never blends them.
+
+Measured on the Durban CAP, hybrid dense+BM25 with RRF:
+
+| Metric | Value | Reading |
+|---|---|---|
+| Recall@5 | 0.503 | half the answering passages are missing from the top five |
+| Recall@10 | 0.712 | widening to ten recovers 21 points |
+| MRR | 0.777 | when a relevant passage is found, it is usually first |
+| nDCG@5 | 0.54 | ranking is mediocre when several passages matter |
+
+The weakest questions are `cap-drought` (0.0) and `cap-targets` (0.0), both of
+which have few relevant passages buried below position five, and
+`cap-prioritisation` (0.168), whose content is a multi-row table that chunks
+badly.
+
+Consequences:
+
+- **No reranker yet.** The metrics identify the failure modes — repeated section
+  headings, near-duplicate "Now and the future" sections, and long action
+  tables — as chunking and labelling problems more than ranking problems. A
+  reranker would be a measured decision, and the measurement says the corpus is
+  the binding constraint.
+- **The document items in the answer set are weaker than they look.** They pass
+  when the right document is cited, which Recall@5 0.50 shows is not the same as
+  the right passage being available to answer from.
+- **The labels are single-annotator and conservative.** Binary relevance, and
+  only passages that clearly answer the question are labelled, so Recall is a
+  lower bound. An independent second annotator is the honest next step, not a
+  larger question set.
 
 ## Revisit triggers
 

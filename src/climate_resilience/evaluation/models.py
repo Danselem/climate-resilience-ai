@@ -72,6 +72,9 @@ class BenchmarkReport(BaseModel):
     run_at: str
     model: str | None
     items: list[ItemResult]
+    # Retrieval quality is measured against labelled passages and reported
+    # beside answer quality, never folded into it.
+    retrieval: dict[str, object] | None = None
 
     def by_category(self) -> dict[str, tuple[int, int]]:
         totals: dict[str, list[int]] = {}

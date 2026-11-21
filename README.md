@@ -6,12 +6,13 @@ An analytical system, not a chatbot: every number is computed deterministically,
 carries its provenance, and can be reproduced from a recorded manifest. A
 language model may later explain those numbers; it may never calculate them.
 
-**Status: agent built, not yet measured.** Heat, population exposure and flood
-exposure end to end on real data, a validated ward boundary layer, a document
-index holding the Durban Climate Action Plan, and a Pydantic AI agent that
-queries both. The agent is tested offline; its latency, cost and retrieval
-accuracy need an OpenRouter key and have not been measured. Vulnerability is
-blocked on a bulk Census 2022 source. See
+**Status: measured.** Heat, population exposure and flood exposure end to end on
+real data, a validated ward boundary layer, a document index holding the Durban
+Climate Action Plan, and a Pydantic AI agent that queries both. The agent is
+scored against a 48-item gold set and retrieval against 99 labelled passages:
+48/48 answers, p95 2.9 s, $0.00017 per question, but **Recall@5 of 0.50** — half
+the passages that answer a document question are missing from the top five.
+Vulnerability is blocked on a bulk Census 2022 source. See
 [`docs/limitations.md`](docs/limitations.md) before reading any result.
 
 - Specification: [`climate-resilience.md`](climate-resilience.md)
@@ -129,13 +130,17 @@ Three guarantees are structural, not prompt requests
 
 | Guarantee | Enforced by |
 |---|---|
-| ≤ 2 model calls, ≤ 3 tool calls | `UsageLimits`, raised by the runtime |
-| Every number cited | `Answer` validator rejects an uncited answer |
+| ≤ 4 model calls, ≤ 5 tool calls | `UsageLimits`; measured worst case, not a target |
+| Every number cited | citations are derived from the evidence, never transcribed |
+| No answer without evidence | an uncited answer is converted to a refusal in code |
 | Flood answers carry the pluvial caveat | post-check appends it if the model omits it |
+| An answer cannot contradict its own evidence | "no flood risk" beside a positive exposure value is refused |
 
-Tools: `get_indicator`, `rank_scopes`, `resolve_scope`, `coverage`, `explain`,
-`search_documents`. Results are trimmed to ten rows so one question cannot pull
-the whole mart into the prompt.
+Tools: `get_indicator`, `rank_scopes`, `coverage`, `explain`,
+`search_documents`. Results are trimmed to five rows so one question cannot pull
+the whole mart into the prompt. `resolve_scope` is deliberately not a tool: the
+model used it to re-resolve names it had already been given, five calls at a
+time, and scope resolution now happens inside the analytical tools.
 
 Models are a fallback chain, because free endpoints rate-limit without notice:
 
@@ -306,6 +311,84 @@ because they depend on external services; their manifests are the evidence.
 The acquisition orchestration itself is tested with fake runners, so a broken
 stage order or failure policy fails CI without a 150 MB download.
 
+## Evaluation
+
+Two numbers, measured separately, because they fail for different reasons.
+
+```bash
+uv run climate-resilience eval-assistant          # answers + retrieval
+uv run climate-resilience eval-assistant --no-retrieval
+```
+
+### Answers
+
+48 questions in four categories, decided mechanically — nothing is judged by
+reading the prose.
+
+| Category | Passes when |
+|---|---|
+| analytical | the expected mart row is among the citations, located by SQL from its published parameters |
+| document | a chunk of the expected document was retrieved and cited |
+| abstain | the answer refused and named the missing input |
+| adversarial | refused, or answered with evidence and no forbidden strings |
+
+```
+items         : 48
+passed        : 48 (100%)
+  abstain      12/12
+  adversarial  8/8
+  analytical   20/20
+  document     8/8
+latency p50/95: 1.64s / 2.99s
+cost          : mean $0.00017
+```
+
+Both targets hold with margin: p95 3.0 s against 6 s, $0.00017 against $0.0040.
+
+Getting from 42/48 to 48/48 was not tuning. Three defects were behind every
+failure, and each was reproduced before it was fixed:
+
+- **Temperature was unset.** The same 48 items scored 75–94% across runs. Pinned
+  at 0, they produce the same result twice. The variance had been hiding which
+  failures were real.
+- **A deterministic tool loop.** nova-micro emitted the *identical* `rank_scopes`
+  call seven times, each returning five successful rows, and never concluded —
+  with temperature 0 the prompt never changed, so the loop could not break.
+  Both `rank_scopes` and `search_documents` now say the result is final and name
+  themselves: "do not call rank_scopes again with the same arguments". A softer
+  wording was tested and ignored.
+- **A measurement-intent gap.** "How has annual rainfall changed since 1980" did
+  not look like a measurement question, so it reached the model, which answered
+  it with hot-day counts. Change-along-a-series phrasing now triggers the
+  existing refusal for unpublished rainfall.
+
+### Retrieval
+
+23 questions, 99 labelled passages, scored with `hybrid_search` alone — no
+model, no tool selection. Labels were written from the document text before any
+retrieval was run, so they describe the corpus rather than the retriever.
+
+```
+retrieval     : 23 labelled questions
+  recall@5    : 0.503
+  recall@10   : 0.712
+  mrr         : 0.777
+  ndcg@5      : 0.54
+  weakest     : cap-drought (0.0), cap-targets (0.0), cap-prioritisation (0.168)
+```
+
+Read together: when retrieval finds a relevant passage it is usually first
+(MRR 0.78), but **half of the passages that answer a question are absent from
+the top five** (0.50) and the ranking is mediocre when several passages matter
+(nDCG 0.54). Widening to ten recovers a further 21 percentage points, which is
+why the assistant asks for more than five when it needs to.
+
+This is the weakest measured part of the system, and unlike the answer score it
+has not been improved — the labels were the work. Three clusters explain most of
+the loss: the CAP has near-duplicate "Now and the future" sections, long
+multi-row action tables that chunk badly, and section headings that repeat
+across chapters.
+
 ## How it is built
 
 | Layer | Purpose |
@@ -382,9 +465,9 @@ committed record.
 ## Not built yet
 
 Ward-level heat (blocked by 5-cell climate resolution, not by code),
-vulnerability, projections, fire, the tool layer, the assistant, PDF reports and
-the AWS deployment. Specified in `climate-resilience.md`; nothing here should be
-read as claiming otherwise.
+vulnerability, projections, fire, PDF reports, the FastAPI endpoints, the
+Streamlit interface and the AWS deployment. Specified in
+`climate-resilience.md`; nothing here should be read as claiming otherwise.
 
 Flood projections are deliberately not built: the 2080 layers are forced by GCMs
 while the baseline uses WATCH, so the difference is not a clean climate signal
