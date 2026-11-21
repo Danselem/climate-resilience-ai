@@ -404,6 +404,24 @@ Two rules the interface follows everywhere:
   layer does not resolve inside the boundary, and that zero means "not detected
   at this resolution".
 
+## Deployment
+
+Terraform for the AWS pilot is in [`infra/`](infra/): RDS PostgreSQL 16 (PostGIS
+and pgvector), ECR, ECS Fargate for the API and the report worker, an ALB, S3,
+SQS with a dead-letter queue, Secrets Manager and CloudWatch alarms. One image,
+two entrypoints — `serve` and `worker` — so parity is a property of the build
+rather than a hope.
+
+```bash
+cd infra && terraform init && terraform plan
+```
+
+The configuration validates (`terraform validate`) and has **not** been applied:
+no account has been provisioned, so there is no smoke test and the cost figure
+is an estimate (~$93/month). [`docs/aws.md`](docs/aws.md) is the runbook,
+including the honest gaps — no TLS, no NAT gateway, and no automated way to load
+the mart.
+
 ## Quality gates
 
 ```bash

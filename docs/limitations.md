@@ -144,6 +144,29 @@ output's `quality.warnings`.
   ambiguous names. A typo becomes a `LookupError` rather than a report, which is
   correct, but there is no preview of which scope was chosen before rendering.
 
+## Deployment
+
+- **The Terraform has never been applied.** It passes `terraform validate` and
+  is written against the provider versions named in `versions.tf`, but no VPC
+  has been created, no task has started and no smoke test has run. Treat it as a
+  reviewed plan, not a working environment.
+- **No TLS and no NAT.** The ALB listens on port 80. Tasks run in public subnets
+  with public IPs, restricted by security groups, because a NAT gateway costs
+  about a third of the monthly budget. Egress is not private.
+- **The mart load is manual.** The image excludes datasets by design, so the
+  database starts empty and the build sequence in `docs/aws.md` must be run from
+  a machine with raw artifacts and a route to RDS. A one-off ECS task fed from
+  S3 is not built.
+- **The 4-hour RTO is untested.** Daily backups with one-day retention satisfy
+  the RPO; restoring into a scratch instance and timing it has not been done.
+- **Report jobs are not yet wired to SQS in code.** Terraform provisions the
+  queue and the DLQ, and the worker drains the local table. Swapping the
+  transport is the `enqueue`/`claim` interface's purpose, and that swap is not
+  written.
+- **PostgreSQL is proven locally, not on RDS.** The full pipeline was run into a
+  local PostGIS 16 database and produced the same 1,707 row keys as SQLite.
+  RDS-specific behaviour — parameter groups, extension versions — is untested.
+
 ## Interface
 
 - **Streamlit's DOM is styled by injected CSS**, which is version-sensitive. It

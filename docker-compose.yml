@@ -1,6 +1,11 @@
 # Local development stack.
-# Phase 1 uses the `cli` service only: batch pipeline work stays batch work.
-# `api` and `worker` services are added in Phases 8 and 10, from the same image.
+# One image, four entrypoints: cli, api, worker, ui. Nothing here forks
+# application logic; every difference is a command or an environment variable.
+#
+#   docker compose up -d db
+#   docker compose run --rm cli wards climate mart exposure flood flood-exposure
+#   docker compose up api worker
+#   docker compose up ui        # http://localhost:8501
 
 services:
   db:
@@ -27,14 +32,70 @@ services:
       db:
         condition: service_healthy
     environment:
-      CRP_DATABASE_URL: postgresql+psycopg://crp:crp@db:5432/crp
+      CRP_DATABASE_URL: &database postgresql+psycopg://crp:crp@db:5432/crp
       CRP_DATA_DIR: /app/data
     volumes:
       - ./data:/app/data
-      - ./src:/app/src
-    # No default long-running command: run stages explicitly, e.g.
-    #   docker compose run --rm cli mart
     command: ["--help"]
+
+  api:
+    build: .
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      CRP_DATABASE_URL: *database
+      CRP_DOCUMENTS_DSN: *database
+      CRP_DATA_DIR: /app/data
+      CRP_API_KEY: ${CRP_API_KEY:-}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      LLM_MODELS: ${LLM_MODELS:-amazon/nova-micro-v1,particle-ai/particle-1:free}
+    volumes:
+      - ./data:/app/data
+    ports:
+      - "8000:8000"
+    command: ["serve", "--host", "0.0.0.0", "--port", "8000"]
+
+  worker:
+    build: .
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      CRP_DATABASE_URL: *database
+      CRP_DOCUMENTS_DSN: *database
+      CRP_DATA_DIR: /app/data
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+    volumes:
+      - ./data:/app/data
+    command: ["worker"]
+
+  ui:
+    build: .
+    depends_on:
+      - api
+    environment:
+      CRP_API_URL: http://api:8000
+      CRP_API_KEY: ${CRP_API_KEY:-}
+      # Streamlit reads its theme from the working directory.
+      HOME: /app
+    volumes:
+      - ./data:/app/data
+    ports:
+      - "8501:8501"
+    entrypoint:
+      [
+        "uv",
+        "run",
+        "--no-sync",
+        "streamlit",
+        "run",
+        "src/climate_resilience/ui/run.py",
+        "--server.port",
+        "8501",
+        "--server.address",
+        "0.0.0.0",
+      ]
 
 volumes:
   pgdata:

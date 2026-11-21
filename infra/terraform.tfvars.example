@@ -1,0 +1,19 @@
+# Copy to terraform.tfvars and edit. The file is git-ignored because it can
+# hold a database password.
+region      = "af-south-1"
+environment = "pilot"
+
+# Leave empty and Terraform generates the password, storing it in Secrets
+# Manager. Setting it here puts it in state, so prefer the generated path.
+# db_password = ""
+
+# Loading the mart needs a route to the database. Two options:
+#  1. set db_publicly_accessible = true and add your CIDR to db_ingress_cidrs,
+#     load, then turn both back off; or
+#  2. reach it through a bastion or VPN and leave both as they are.
+db_publicly_accessible = false
+db_ingress_cidrs       = []
+
+api_desired_count = 2
+image_tag         = "latest"
+alarm_email       = ""
