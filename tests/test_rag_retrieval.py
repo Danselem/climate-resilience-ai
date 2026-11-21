@@ -76,6 +76,10 @@ def connection() -> Iterator[Any]:
         cursor.execute("create schema if not exists rag_test")
         cursor.execute("set search_path to rag_test, public")
     conn.commit()
+    # A previous run may have left a table at a different vector width.
+    with conn.cursor() as cursor:
+        cursor.execute("drop table if exists document_chunk")
+    conn.commit()
     store.ensure_schema(conn, dimension=DIMENSION)
     try:
         with conn.cursor() as cursor:
@@ -93,12 +97,13 @@ def chunk(
     chunk_id: str,
     text: str,
     *,
+    document_id: str = "test-plan",
     scope_level: str = "municipality",
     scope_ids: tuple[str, ...] = ("ethekwini",),
 ) -> Chunk:
     return Chunk(
         chunk_id=chunk_id,
-        document_id="test-plan",
+        document_id=document_id,
         version="2026",
         index=0,
         text=text,
@@ -191,3 +196,39 @@ def test_replacing_a_document_removes_its_old_chunks(connection) -> None:
 
 def test_an_empty_query_returns_nothing(connection) -> None:
     assert hybrid_search(connection, HashingEmbedder(), "   ") == []
+
+
+def test_a_dimension_change_is_refused_with_an_actionable_message(connection) -> None:
+    with connection.cursor() as cursor:
+        cursor.execute("drop table if exists document_chunk")
+    connection.commit()
+    store.ensure_schema(connection, dimension=384)
+
+    with pytest.raises(RuntimeError, match="--rebuild"):
+        store.ensure_schema(connection, dimension=768)
+
+    # Restore the width the other tests and the fixture teardown expect.
+    with connection.cursor() as cursor:
+        cursor.execute("drop table if exists document_chunk")
+    connection.commit()
+    store.ensure_schema(connection, dimension=DIMENSION)
+
+
+def test_a_document_removed_from_the_catalogue_stops_being_retrievable(
+    connection,
+) -> None:
+    for chunk_id, document_id in [("c1", "keep"), ("c2", "gone")]:
+        store.replace_document(
+            connection,
+            document_id=document_id,
+            chunks=[chunk(chunk_id, f"text {chunk_id}", document_id=document_id)],
+            embeddings=[[0.1] * DIMENSION],
+        )
+
+    removed = store.drop_documents_except(connection, ["keep"])
+
+    with connection.cursor() as cursor:
+        cursor.execute("select document_id from document_chunk")
+        remaining = {row["document_id"] for row in cursor.fetchall()}
+    assert removed == 1
+    assert remaining == {"keep"}

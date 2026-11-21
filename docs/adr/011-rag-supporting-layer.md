@@ -40,11 +40,13 @@ Putting them in one table would let the first pass as the second.
   required for PostGIS. Neither upstream image ships both extensions, so
   `docker/db/Dockerfile` builds one; PostGIS 3.7 and pgvector 0.8.7 are
   verified in the running container.
-- **Local embeddings.** `all-MiniLM-L6-v2`, 384 dimensions, normalised. No
-  per-query cost, ~20 ms, and document text never leaves the machine. The trade
-  is a `torch` dependency and a model download, which is stated rather than
-  hidden. `HashingEmbedder` exists for offline tests and is never used to
-  measure retrieval quality.
+- **Local embeddings.** `bge-base-en-v1.5`, 768 dimensions, normalised, with
+  the retrieval instruction prefix on queries. No per-query cost and document
+  text never leaves the machine. The trade is a `torch` dependency and a model
+  download, which is stated rather than hidden. `HashingEmbedder` exists for
+  offline tests and is never used to measure retrieval quality. (Originally
+  `all-MiniLM-L6-v2`; see the amendment below, which explains why the 256-token
+  window was a defect rather than a preference.)
 - **Docling, with `HybridChunker`.** Municipal plans put targets, budgets and
   ward lists in tables; a flat text split loses them. Headings and page numbers
   travel with every chunk so a citation can name its section.
@@ -54,8 +56,9 @@ Putting them in one table would let the first pass as the second.
   caller can say which it is.
 - **Hybrid retrieval, fused by rank.** Dense cosine for paraphrase, Postgres
   full-text for identifiers ("RCP8.5", a ward number), combined by reciprocal
-  rank fusion. A learned weight is not justifiable with ten documents. A
-  reranker is deferred until retrieval evaluation shows it is needed.
+  rank fusion. A learned weight is not justifiable with ten documents; the
+  fusion weight is measured instead (see the amendment). A reranker is deferred
+  until retrieval evaluation shows it is needed.
 - **Evaluation splits the two halves.** Retrieval metrics (Recall@k, MRR,
   nDCG) apply only to the document index; analytical correctness applies only
   to the mart. Reporting one number for both would hide which half failed.
@@ -90,10 +93,11 @@ Measured on the Durban CAP, hybrid dense+BM25 with RRF:
 | MRR | 0.777 | when a relevant passage is found, it is usually first |
 | nDCG@5 | 0.54 | ranking is mediocre when several passages matter |
 
-The weakest questions are `cap-drought` (0.0) and `cap-targets` (0.0), both of
+The weakest questions were `cap-drought` (0.0) and `cap-targets` (0.0), both of
 which have few relevant passages buried below position five, and
 `cap-prioritisation` (0.168), whose content is a multi-row table that chunks
-badly.
+badly. After the amendments below the weakest are `cap-sea-level` (0.131),
+`cap-city-profile` (0.151) and `cap-biodiversity` (0.339).
 
 Consequences:
 
@@ -109,6 +113,71 @@ Consequences:
   only passages that clearly answer the question are labelled, so Recall is a
   lower bound. An independent second annotator is the honest next step, not a
   larger question set.
+
+## Amended: the embedding window, the lexical query and the fusion weight
+
+Three defects sat behind the first retrieval measurement. All were configuration,
+not the choice of architecture.
+
+**1. The chunks did not fit the model.** Chunking was set to 512 tokens and the
+embedder read 256, so 56 of 156 chunks (36%) were embedded with an average of
+141 tokens — more than half the chunk — silently truncated. The second half of a
+section, where its conclusion usually sits, was never in the vector.
+
+The fix was to change the model rather than the chunks: `bge-base-en-v1.5` has a
+512-token window, so existing chunks became valid, and because `chunk_id` is a
+hash of the text, **the 99 relevance labels survived**. Re-chunking would have
+invalidated them. Dense retrieval on the same labels:
+
+| Model | Window | R@5 | R@10 | MRR | nDCG@5 |
+|---|---|---|---|---|---|
+| all-MiniLM-L6-v2 | 256 | 0.525 | 0.712 | 0.811 | 0.567 |
+| bge-small-en-v1.5 | 512 | 0.557 | 0.695 | 0.822 | 0.588 |
+| **bge-base-en-v1.5** | 512 | **0.585** | 0.705 | **0.913** | **0.647** |
+
+Seven chunks still exceed 512 tokens by up to two, because the chunker
+tokenizes with a different model. That is 2 tokens against 141.
+
+**2. The lexical query asked for a conjunction.** `plainto_tsquery` ANDs every
+surviving term, so "what does the plan say about sea level rise" became
+`plan & sea & level & rise` and matched almost nothing (Recall@5 0.047). It also
+indexed `text` while 136 chunks carry words that appear only in their headings.
+Content words are now OR-ed into `to_tsquery` and headings are indexed. Lexical
+Recall@5: 0.047 → 0.383.
+
+**3. Equal weight was expensive.** With a working lexical arm, sweeping the
+weight showed RRF had been diluting a much better dense ranking:
+
+| Lexical weight | R@5 | R@10 | MRR | nDCG@5 |
+|---|---|---|---|---|
+| 0.0 (dense only) | 0.585 | 0.705 | 0.913 | 0.647 |
+| 1.0 | 0.502 | 0.678 | 0.737 | 0.525 |
+| 0.4 | 0.531 | 0.678 | 0.782 | 0.565 |
+| 0.2 | 0.551 | 0.716 | 0.881 | 0.607 |
+| **0.1** | 0.570 | **0.734** | 0.887 | 0.620 |
+
+At 0.1 the lexical arm is a wash on ranking against dense-only and adds three
+points at Recall@10, so it keeps its place at a weight that reflects its
+measured strength rather than an assumption of parity.
+
+**Result: Recall@5 0.503 → 0.570, MRR 0.777 → 0.887, nDCG@5 0.540 → 0.620,
+Recall@10 0.712 → 0.734.** Answers stayed at 48/48.
+
+Caveat that belongs here: the weight was chosen on the same 23 questions it is
+reported against, so those numbers are optimistic. The direction of the effect
+(equal weighting was harmful) is not in doubt; the exact optimum is.
+
+Two related defects were fixed in the same pass, neither of them retrieval
+quality:
+
+- **Deactivated documents stayed retrievable.** Ingest replaced the documents it
+  was given and never removed one dropped from the catalogue. Ingest now deletes
+  chunks of inactive documents. (Version mixing was already handled:
+  `replace_document` deletes by document id, so two versions cannot coexist.)
+- **`replace_document` deleted by its argument but inserted each chunk's own
+  document id.** A caller passing inconsistent objects would have deleted the
+  old rows and written replacements under a different document. It now refuses
+  and writes the argument.
 
 ## Revisit triggers
 

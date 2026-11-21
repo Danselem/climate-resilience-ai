@@ -97,11 +97,15 @@ output's `quality.warnings`.
   expected row is found with SQL from the published parameters. That catches a
   tool returning the wrong row; it cannot catch the mart itself being wrong,
   which is `scripts/independent_check.py`'s job.
-- **Retrieval quality is measured, and it is the weakest part.** Recall@5 0.50,
-  Recall@10 0.71, MRR 0.78, nDCG@5 0.54 over 23 questions and 99 labelled
-  passages. Half the passages that answer a question are missing from the top
+- **Retrieval quality is measured, and it is still the weakest part.** Recall@5
+  0.57, Recall@10 0.73, MRR 0.89, nDCG@5 0.62 over 23 questions and 99 labelled
+  passages. 43% of the passages that answer a question are missing from the top
   five. The document items in the answer set only require that the right
   document was cited, so they overstate how usable the prose is.
+- **The fusion weight was tuned on the same questions it is reported against.**
+  1.0/0.1 beat 1.0/1.0 by seven points of Recall@5, so the direction is not in
+  doubt, but the reported optimum is optimistic. An untouched hold-out set is
+  the fix, and it does not exist yet.
 - **The relevance labels are single-annotator.** One person read the corpus and
   decided which passages answer each question, before running retrieval. The
   numbers are reproducible and unaudited. Binary relevance and conservative
@@ -126,6 +130,14 @@ output's `quality.warnings`.
 
 ## Assistant
 
+- **The embedding model is the large object in the process.**
+  `bge-base-en-v1.5` is 768-dimensional and roughly 440 MB on disk, against
+  `all-MiniLM-L6-v2`'s 90 MB, so the container needs more memory and its cold
+  start is longer. Query embedding stays inside the latency budget; the Fargate
+  memory figure has not been measured yet.
+- **Seven chunks still exceed the 512-token window** by up to two tokens, because
+  the chunker tokenizes with a different model. Two tokens lost against the 141
+  the previous model discarded.
 - **Latency is inside target only on a faster model.** `amazon/nova-micro-v1`
   answers in 1.6-3.8 s; the free fallback takes 10-18 s. Cold-start document
   questions add ~8 s to load the embedding model. The 6 s p95 applies to a warm

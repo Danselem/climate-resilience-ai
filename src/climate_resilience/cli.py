@@ -215,10 +215,13 @@ def eval_assistant(
 @app.command()
 def documents(
     only: str | None = typer.Option(None, help="Ingest a single document id"),
+    rebuild: bool = typer.Option(
+        False, help="Drop the index first, e.g. after changing embedding model"
+    ),
 ) -> None:
     """Chunk and index catalogue documents into pgvector."""
     settings = get_settings()
-    results = ingest_all(settings, only=only)
+    results = ingest_all(settings, only=only, rebuild=rebuild)
     if not results:
         typer.echo("no active documents in data/catalogue/documents.json")
         raise typer.Exit(code=0)

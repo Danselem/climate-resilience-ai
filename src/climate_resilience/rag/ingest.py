@@ -24,12 +24,19 @@ class IngestResult:
     checksum: str
 
 
-def ingest_all(settings: Settings, *, only: str | None = None) -> list[IngestResult]:
+def ingest_all(
+    settings: Settings,
+    *,
+    only: str | None = None,
+    rebuild: bool = False,
+) -> list[IngestResult]:
     catalogue_path = settings.catalogue_dir / "documents.json"
     documents = catalogue.load(catalogue_path)
     embedder = embeddings.get_embedder()
     connection = store.connect(settings.documents_dsn)
     try:
+        if rebuild:
+            store.reset(connection)
         store.ensure_schema(connection, dimension=embedder.dimension)
         results: list[IngestResult] = []
         for document in documents.active():
@@ -56,6 +63,13 @@ def ingest_all(settings: Settings, *, only: str | None = None) -> list[IngestRes
             )
             results.append(
                 IngestResult(document.id, len(chunks), checksum)
+            )
+        if only is None:
+            # A document removed from the catalogue must stop being retrievable.
+            # Ingest only ever replaces what it is handed, so a deactivated plan
+            # would otherwise keep answering questions for years.
+            store.drop_documents_except(
+                connection, [document.id for document in documents.active()]
             )
         return results
     finally:

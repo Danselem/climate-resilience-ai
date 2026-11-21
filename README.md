@@ -10,8 +10,9 @@ language model may later explain those numbers; it may never calculate them.
 real data, a validated ward boundary layer, a document index holding the Durban
 Climate Action Plan, and a Pydantic AI agent that queries both. The agent is
 scored against a 48-item gold set and retrieval against 99 labelled passages:
-48/48 answers, p95 2.9 s, $0.00017 per question, but **Recall@5 of 0.50** — half
-the passages that answer a document question are missing from the top five.
+48/48 answers, p95 2.9 s, $0.00017 per question, but **Recall@5 of 0.57** — a
+little under half the passages that answer a document question are still missing
+from the top five.
 Vulnerability is blocked on a bulk Census 2022 source. See
 [`docs/limitations.md`](docs/limitations.md) before reading any result.
 
@@ -370,24 +371,34 @@ retrieval was run, so they describe the corpus rather than the retriever.
 
 ```
 retrieval     : 23 labelled questions
-  recall@5    : 0.503
-  recall@10   : 0.712
-  mrr         : 0.777
-  ndcg@5      : 0.54
-  weakest     : cap-drought (0.0), cap-targets (0.0), cap-prioritisation (0.168)
+  recall@5    : 0.57
+  recall@10   : 0.734
+  mrr         : 0.887
+  ndcg@5      : 0.62
+  weakest     : cap-sea-level (0.131), cap-city-profile (0.151), cap-biodiversity (0.339)
 ```
 
-Read together: when retrieval finds a relevant passage it is usually first
-(MRR 0.78), but **half of the passages that answer a question are absent from
-the top five** (0.50) and the ranking is mediocre when several passages matter
-(nDCG 0.54). Widening to ten recovers a further 21 percentage points, which is
-why the assistant asks for more than five when it needs to.
+When retrieval finds a relevant passage it is almost always first (MRR 0.89),
+but **43% of the passages that answer a question are still absent from the top
+five**. Three defects were behind the first measurement, and fixing them took
+the numbers from 0.50/0.78/0.54 to 0.57/0.89/0.62:
 
-This is the weakest measured part of the system, and unlike the answer score it
-has not been improved — the labels were the work. Three clusters explain most of
-the loss: the CAP has near-duplicate "Now and the future" sections, long
-multi-row action tables that chunk badly, and section headings that repeat
-across chapters.
+- **The chunks did not fit the model.** Chunking was set to 512 tokens and
+  `all-MiniLM-L6-v2` reads 256, so 36% of chunks were embedded with their second
+  half silently discarded. Switching to `bge-base-en-v1.5` (512-token window)
+  made the existing chunks valid — and because chunk ids are content hashes, the
+  labels survived.
+- **The lexical query asked for a conjunction**, so "what does the plan say
+  about sea level rise" required a chunk containing every word. OR-ed content
+  words, and headings now indexed: lexical Recall@5 0.047 → 0.383.
+- **Equal fusion weight was expensive**, because the two arms are not equally
+  good. Sweeping it showed 1.0/0.1 beats 1.0/1.0 by 7 points of Recall@5 and 11
+  of nDCG.
+
+The labels are single-annotator and conservative, and the fusion weight was
+chosen on the same questions it is reported against, so these are optimistic.
+What remains is corpus-shaped: repeated section headings, near-duplicate "Now
+and the future" sections, and multi-row action tables that chunk badly.
 
 ## How it is built
 

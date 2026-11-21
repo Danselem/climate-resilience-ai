@@ -43,7 +43,7 @@ create index if not exists ix_document_chunk_document
 create index if not exists ix_document_chunk_scope
     on document_chunk (scope_level);
 create index if not exists ix_document_chunk_fts
-    on document_chunk using gin (to_tsvector('english', text));
+    on document_chunk using gin (to_tsvector('english', context));
 create index if not exists ix_document_chunk_embedding
     on document_chunk using hnsw (embedding vector_cosine_ops);
 """
@@ -56,8 +56,50 @@ def connect(dsn: str) -> psycopg.Connection:
 
 
 def ensure_schema(connection: psycopg.Connection, *, dimension: int) -> None:
+    """Create the index, and refuse to mix embedding dimensions silently.
+
+    Changing the embedding model changes the vector width. Inserting a 768-d
+    vector into a 384-wide column fails at the driver with a message that says
+    nothing about the cause, so the mismatch is checked and named here.
+    """
     with connection.cursor() as cursor:
         cursor.execute(SCHEMA.format(dimension=int(dimension)))
+        cursor.execute(
+            """
+            select format_type(atttypid, atttypmod)
+            from pg_attribute
+            where attrelid = 'document_chunk'::regclass and attname = 'embedding'
+            """
+        )
+        found = cursor.fetchone()
+    if found is not None and found["format_type"] != f"vector({int(dimension)})":
+        raise RuntimeError(
+            f"the index holds {found['format_type']} vectors but the configured "
+            f"embedder produces vector({int(dimension)}); rebuild with "
+            "`climate-resilience documents --rebuild`"
+        )
+
+
+def drop_documents_except(
+    connection: psycopg.Connection, document_ids: Sequence[str]
+) -> int:
+    """Remove chunks of documents that are no longer in the catalogue."""
+    with connection.cursor() as cursor:
+        cursor.execute(
+            # The cast matters: an untyped array compares as unknown[] and
+            # matches nothing, which deletes every row.
+            "delete from document_chunk where not (document_id = any(%s::text[]))",
+            (list(document_ids),),
+        )
+        removed = cursor.rowcount
+    connection.commit()
+    return removed
+
+
+def reset(connection: psycopg.Connection) -> None:
+    """Drop the index so it can be rebuilt with a different embedding model."""
+    with connection.cursor() as cursor:
+        cursor.execute("drop table if exists document_chunk")
     connection.commit()
 
 
@@ -78,6 +120,14 @@ def replace_document(
         raise ValueError(
             f"{document_id}: {len(chunks)} chunks but {len(embeddings)} embeddings"
         )
+    # The delete is scoped by the argument; the rows used to be written with
+    # each chunk's own id. If the two ever disagreed, the old rows would be
+    # deleted and the replacements written under a different document.
+    foreign = {chunk.document_id for chunk in chunks} - {document_id}
+    if foreign:
+        raise ValueError(
+            f"{document_id}: chunks belong to {sorted(foreign)}; one document per call"
+        )
     with connection.cursor() as cursor:
         cursor.execute(
             "delete from document_chunk where document_id = %s", (document_id,)
@@ -92,7 +142,7 @@ def replace_document(
             [
                 (
                     chunk.chunk_id,
-                    chunk.document_id,
+                    document_id,
                     chunk.version,
                     chunk.index,
                     chunk.text,
